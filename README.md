@@ -2,6 +2,52 @@
 
 **v1.7.1:** 11.3 강제진동을 닫힌 해로 바꾸어 최대 설정 계산이 2.65초에서 0.014초가 되었습니다. 푸리에 계수 계산을 공통 함수 하나로 모았고, 12.8 막의 모델링(미소부분의 힘과 수렴 표)을 추가했습니다.
 
+## 처음 사용하는 분께
+
+### 실행 방법 (Windows)
+
+1. [python.org](https://www.python.org/downloads/)에서 **Python 3.10 이상**을 설치합니다. 설치 첫 화면에서 **"Add python.exe to PATH"**를 선택하십시오.
+2. 이 저장소를 내려받습니다. GitHub의 **Code → Download ZIP**으로 받아 압축을 풀거나 `git clone`을 사용합니다.
+3. 폴더 안의 **`실행.bat`**을 더블클릭합니다.
+   - 처음 한 번은 가상환경(`.venv`)을 만들고 필요한 패키지(PySide6, NumPy, SciPy, SymPy, Matplotlib)를 설치합니다. 인터넷이 필요하며 몇 분 걸립니다.
+   - 그다음부터는 바로 프로그램 창이 열립니다.
+   - 문제가 생기면 `실행.bat`이 원인(Python 없음, 설치 실패, 오류 내용)을 보여 주고 멈춥니다.
+
+### 프로그램 사용
+
+1. 왼쪽 위 **교재 바로가기**에서 절(예: `11.2 · 반구간 전개`)을 고릅니다.
+2. **예제** 목록에서 `교재 예제 11.2-3 · 반파정류기 (15쪽)`처럼 교재 본문 예제를 고르거나 수식을 직접 입력합니다.
+3. **계산하기**를 누르면 오른쪽에 그래프 탭, **수치 표**, **학습 설명**(정의·유도·코드 해설)이 나타납니다.
+4. 11·12장 본문 예제 50개가 모두 들어 있으며, 교재에 실린 수치는 자동 테스트로 확인합니다([docs/COVERAGE.md](docs/COVERAGE.md)).
+
+### 코드 구성 한눈에 보기
+
+계산은 세 층으로 나뉩니다. 화면(`ui`)은 입력을 모아 주제(`topics`)에 넘기고, 주제는 수학 계산(`core`)을 불러 결과·표·그래프를 만듭니다. `core`는 Qt를 전혀 쓰지 않으므로 노트북이나 테스트에서 그대로 불러 쓸 수 있습니다.
+
+| 폴더·파일 | 역할 |
+|---|---|
+| `main.py` | 프로그램 시작점 (`실행.bat`이 실행) |
+| `engineering_math/ui/` | 화면: 주제 선택, 입력 폼, 계산 프로세스, 그래프·표, 재생 창 |
+| `engineering_math/topics/` | 주제별 입력 명세·계산 연결·그래프, 학습 설명, 교재 예제 목록 |
+| `engineering_math/core/` | 수학 계산: 수식 해석, Fourier 계수, 변환, PDE 해, 구적 |
+| `tests/` | 해석해·교재 수치와 비교하는 자동 테스트 (`python -m pytest tests`) |
+| `만들기.ipynb` | `core`를 불러 교재 순서로 계산을 재현하는 해설 노트북 |
+
+교재 절과 코드의 대응은 다음과 같습니다.
+
+| 교재 | 화면·입력 (`topics/`) | 수학 계산 (`core/`) |
+|---|---|---|
+| 11.1 Fourier 급수 | `fourier.py` | `fourier.py`, `analysis.py` |
+| 11.2~11.6 반구간·강제진동·근사·Sturm–Liouville·직교급수 | `chapter11_series.py` | `chapter11.py` |
+| 11.7~11.10 Fourier 적분·변환·DFT·변환표 | `chapter11_transforms.py` | `chapter11.py`, `quadrature.py` |
+| 12.1 기본개념, 12.4 분류·D'Alembert, 12.6 직사각형 정상 상태, 12.7~12.12 | `chapter12.py` | `chapter12.py`, `quadrature.py` |
+| 12.2~12.3 진동하는 현 | `wave.py` | `pde.py` |
+| 12.5~12.6 열전도 | `heat.py` | `pde.py` |
+| 학습 설명 | `chapter11_lessons.py`, `chapter12_lessons.py` | — |
+| 교재 본문 예제 50개 | `textbook.py` | — |
+
+각 주제는 `inputs`(입력 명세), `compute(params)`(계산 → `Result`), `figures(result)`(그래프)를 가진 클래스이며, 어떤 주제가 어떤 화면 구성에 연결되는지는 `topics/catalog.py`에 모여 있습니다. 파일별 설명은 아래 [코드 구조](#코드-구조)를 참고하십시오.
+
 ## v1.7 — 교재 11·12장 예제 완성, 계산 응답 속도와 정확도
 
 **BEFORE:** 계산할 때마다 새 프로세스를 띄워 0.7~1.4초가 걸렸습니다. 예제 목록은 자체 예시였고 교재 본문 예제 10개는 기능이 없었습니다.
@@ -143,7 +189,7 @@
 
 ## 설치 및 실행
 
-Python 3.11 이상을 권장합니다. 프로젝트 루트에서 다음 명령을 실행하십시오.
+Python 3.10 이상이 필요합니다(3.11 이상 권장). `실행.bat`이 아래 과정을 자동으로 수행하며, 직접 하려면 프로젝트 루트에서 다음 명령을 실행하십시오.
 
 ```powershell
 python -m venv .venv
@@ -151,7 +197,7 @@ python -m venv .venv
 .venv\Scripts\python.exe main.py
 ```
 
-환경이 준비되어 있다면 `실행.bat`을 더블클릭하십시오. Qt의 공식 Python 바인딩인 PySide6 창이 열리며 주력 실행 경로는 `main.py`입니다. 테스트와 노트북 셀 검사는 `pip install -r requirements-dev.txt`로 개발 의존성을 설치하십시오.
+`실행.bat`을 더블클릭하면 처음 한 번 환경을 준비한 뒤 실행합니다. `실행.bat --check`는 창을 띄우지 않고 준비 상태만 확인합니다. Qt의 공식 Python 바인딩인 PySide6 창이 열리며 주력 실행 경로는 `main.py`입니다. 테스트와 노트북 셀 검사는 `pip install -r requirements-dev.txt`로 개발 의존성을 설치하십시오.
 
 배포판은 `dist/EngineeringMathStudio/EngineeringMathStudio.exe`를 실행하십시오. `_internal`을 포함한 전체 폴더가 필요합니다. Python 설치는 필요하지 않습니다.
 
@@ -270,36 +316,41 @@ ODE의 **이 ODE 결과를 라플라스 역변환으로 확인** 버튼을 누�
 ## 코드 구조
 
 ```text
-main.py                         # Qt 실행 및 배포 진입점
+main.py                          # 프로그램 시작점 (Qt 창, --self-test)
+실행.bat                         # 처음 실행 시 .venv 생성·패키지 설치 후 main.py 실행
 engineering_math/
-  core/
-    expr.py                     # 허용 수식·변수·인자 수·복소수 정책
-    models.py                   # InputSpec, Result, Topic 계약
-    tables.py                   # 원본 격자를 참조하는 표 행
-    transform_export.py         # 노트북 DFT 결과 내보내기
-    fourier.py                  # 적분·부분합·오차·계수 캐시
-    analysis.py                 # DFT/FFT와 추가 분석
-    diagnostics.py              # 격자 세분화와 수렴 진단
-    plotting.py                 # 결과 배열을 받는 공통 그래프
-    pde.py                      # 사인 계수·공통 PDE 그림·열 정확도 비교
-    custom_ode.py               # 직접 외력·불연속 경계·수치 비교·기호 상태
-    project.py                  # JSON 설정 및 CSV ZIP 저장
-  topics/
-    catalog.py                  # 실험군·문제·지원 구성·교재 연결
-    fourier.py                  # 푸리에 입력·계산·그림
-    heat.py                     # 열방정식 입력·계산·그림
-    wave.py                     # 파동방정식 및 열·파동 비교
-    ode.py                      # 감쇠진동·강제진동·위상평면·Y(s)
-    laplace.py                  # 단측 정변환·역변환·분포 처리
-    lessons.py                  # 주제별 학습 설명
+  core/                          # 수학 계산 (Qt를 쓰지 않음)
+    expr.py                      # 허용 수식의 안전한 해석(SymPy)과 배열 평가
+    models.py                    # InputSpec·Result 계약, 입력 검증
+    fourier.py                   # 사다리꼴 가중치, Fourier·반구간 계수, 부분합, 계수 캐시
+    chapter11.py                 # 직교 기저 투영, Sturm–Liouville(주기·Robin), 강제진동 닫힌 해, 적분 변환
+    chapter12.py                 # D'Alembert, 열핵 합성곱, 막의 모드, 직사각형·원판·구 퍼텐셜
+    pde.py                       # 열·파동의 사인·코사인 계수, 공통 PDE 그림, 열 정확도 비교
+    quadrature.py                # 도약점을 나눈 Gauss–Legendre 구적
+    analysis.py, diagnostics.py  # 11.1의 DFT/FFT·aliasing·수렴 추가 분석
+    plotting.py, tables.py       # 공통 그래프, 원본 배열을 참조하는 표 행
+    custom_ode.py                # ODE 직접 외력 계산
+    project.py                   # 설정 JSON 저장·불러오기(이전 설정 변환), 결과 CSV ZIP
+    transform_export.py          # 노트북 DFT 결과 내보내기
+  topics/                        # 주제별 입력 명세·계산 연결·그래프
+    catalog.py                   # 실험군·문제·구성과 교재 절 연결
+    textbook.py                  # 교재 본문 예제 프리셋 50개
+    fourier.py                   # 11.1
+    chapter11_series.py          # 11.2~11.6
+    chapter11_transforms.py      # 11.7~11.10 (DFT, 변환표 34개 포함)
+    chapter12.py                 # 12.1, 12.4, 12.6(직사각형), 12.7~12.12
+    wave.py, heat.py             # 12.2~12.3 현, 12.5~12.6 열전도
+    ode.py, laplace.py           # 상권 내용(감쇠진동, Laplace 변환)
+    lessons.py, chapter11_lessons.py, chapter12_lessons.py  # 학습 설명
   ui/
-    experiments.py              # 공통 실험 선택 화면
-    forms.py                    # 입력 명세로 생성하는 공통 폼
-    jobs.py                     # 종료 가능한 계산 프로세스
-    window.py                   # 주제 선택·그래프·표·저장 화면
-    animation.py                # 공통 프레임 재생 창
-tests/test_mathematics.py        # 해석해·입력 경계·저장 검증
-만들기.ipynb                    # 코어를 불러오는 설명 및 실습
+    window.py                    # 주 화면: 주제 선택·입력·그래프 탭·표·저장
+    experiments.py, forms.py     # 실험 선택기, 입력 명세로 만드는 폼
+    jobs.py                      # 상주 계산 프로세스(취소 가능)
+    animation.py                 # 1·2차원 재생 창
+  selftest.py                    # 실제 Qt 화면 통합 검사 (main.py --self-test)
+tests/                           # pytest: 해석해·교재 수치·입력·저장·화면 계약 검증
+docs/                            # 설계(ARCHITECTURE), 성능(PERFORMANCE), 구현 현황(COVERAGE)
+만들기.ipynb                     # core를 불러 교재 순서로 재현하는 해설 노트북
 ```
 
 새 주제는 `id`, `title`, `description`, `inputs`, `examples`, `compute(params)`, `figures(result)`, `animation(result)`를 제공하고 `topics/__init__.py`에 등록합니다. `compute`는 Qt 위젯을 읽지 않으며 계산 결과를 `Result`로 반환합니다. `figures`는 결과만 받아 Figure를 만듭니다. 현재 입력 종류는 문자열·정수·실수·선택입니다. 행렬 편집처럼 새로운 입력이 필요하면 공통 폼에 입력 종류를 추가하거나 전용 폼 연결부를 확장하십시오. 모든 주제가 단순한 수식 입력 하나로 해결된다고 가정하지 않습니다.
