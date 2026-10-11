@@ -24,7 +24,7 @@ def test_constant_initial_velocity():
 @pytest.mark.parametrize('alpha', [.01, .2, 2.])
 def test_infinite_heat_gaussian(alpha):
     x, time = np.linspace(-4, 4, 101), np.linspace(0, 2, 21)
-    frames = infinite_heat(lambda x: np.exp(-x*x), x, time, alpha, 160)
+    frames = infinite_heat(lambda x: np.exp(-x*x), x, time, alpha, 16385)
     width = 1+4*alpha*time[:,None]
     np.testing.assert_allclose(frames, np.exp(-x[None,:]**2/width)/np.sqrt(width), atol=1e-8)
 
@@ -57,10 +57,11 @@ def test_disk_single_mode_and_energy(m):
     time = np.linspace(0,1,11)
     root = jn_zeros(m,1)[0]
     basis = jv(m,root*r[:,None]/radius)*np.cos(m*theta[None,:])
-    frames, energy, a, v, omega, labels = disk_membrane(r,theta,basis,np.zeros_like(basis),radius,speed,2,m,time)
+    mode = lambda rho, angle: jv(m,root*rho/radius)*np.cos(m*angle)
+    frames, energy, a, v, omega, labels = disk_membrane(r,theta,mode,lambda rho, angle: 0*rho,radius,speed,2,m,time)
     exact = np.cos(speed*root/radius*time)[:,None,None]*basis
-    # 사다리꼴 방사 적분의 O(Δr²) 오차를 포함합니다.
-    np.testing.assert_allclose(frames,exact,atol=9e-6)
+    # Gauss–Legendre 방사 구적이므로 표시 격자 간격과 무관하게 정확합니다.
+    np.testing.assert_allclose(frames,exact,atol=1e-12)
     np.testing.assert_allclose(energy,energy[0],rtol=1e-12)
     np.testing.assert_allclose(frames[:,-1],0,atol=0)
 
@@ -81,11 +82,10 @@ def test_disk_potential_harmonic():
 
 def test_sphere_dipole_and_constant():
     r, theta = np.linspace(0,2,31), np.linspace(0,2*np.pi,61,endpoint=False)
-    field, coefficients = sphere_potential(lambda mu: 2+mu,r,theta,2.,7,8001)
+    field, coefficients = sphere_potential(lambda mu: 2+mu,r,theta,2.,7,1001)
     exact = 2+r[:,None]/2*np.cos(theta)
-    np.testing.assert_allclose(field,exact,atol=6e-6)
-    refined, _ = sphere_potential(lambda mu: 2+mu,r,theta,2.,7,16001)
-    assert np.max(np.abs(refined-exact)) < np.max(np.abs(field-exact))/3.9
+    # 다항식 경계값은 Gauss–Legendre 구적으로 정확히 적분됩니다.
+    np.testing.assert_allclose(field,exact,atol=1e-12)
     np.testing.assert_allclose(field[0],2,atol=1e-12)
 
 
@@ -115,7 +115,7 @@ def test_semiaxis_heat_step_and_corner():
     np.testing.assert_allclose(d['frames'][-1],2*erfc(d['x']/(2*np.sqrt(.5*d['time'][-1]))))
 
 
-NEW_IDS = ['pde_basics','dalembert','infinite_heat','rectangle_membrane','disk_membrane','coordinate_potential','pde_laplace']
+NEW_IDS = ['pde_basics','pde_classification','dalembert','rectangle_laplace','infinite_heat','rectangle_membrane','disk_membrane','coordinate_potential','pde_laplace']
 
 
 @pytest.mark.parametrize('topic_id',NEW_IDS)
@@ -150,3 +150,130 @@ def test_examples(topic_id):
 def test_bad_inputs(topic_id,params):
     with pytest.raises(ValueError):
         get_topic(topic_id).compute(params)
+
+
+def test_infinite_heat_textbook_pulse_matches_erf():
+    """교재 12.7 예제 1: U₀=100, |x|<1, c²=1의 닫힌 해 (식 13)."""
+    from scipy.special import erf
+    x, time = np.linspace(-3, 3, 241), np.array([0., 1/8, 1/2, 2.])
+    frames = infinite_heat(lambda v: np.where(np.abs(v) < 1, 100., 0.), x, time, 1., 16385)
+    root = 2*np.sqrt(time[1:, None])
+    exact = 50*(erf((1-x)/root) + erf((1+x)/root))
+    # 도약을 erfc로 분리하므로 기계 정밀도 수준입니다.
+    np.testing.assert_allclose(frames[1:], exact, atol=1e-10)
+
+
+def test_infinite_heat_one_sided_exponential():
+    """도약과 매끄러운 꼬리가 함께 있는 e^(−x)H(x)의 닫힌 해와 비교합니다."""
+    from scipy.special import erfc
+    x, time, alpha = np.linspace(-3, 3, 121), np.array([.05, .3, 1.]), .7
+    frames = infinite_heat(lambda v: np.where(v > 0, np.exp(-v), 0.), x, time, alpha, 16385)
+    at = alpha*time[:, None]
+    exact = .5*np.exp(at - x)*erfc((2*at - x)/(2*np.sqrt(at)))
+    # 도약을 뺀 나머지에 꺾임이 남으므로 O(h²) 수준의 오차를 허용합니다.
+    np.testing.assert_allclose(frames, exact, atol=2e-6)
+
+
+def test_sphere_capacitor_textbook_example():
+    """교재 12.11 예제 1: 상반구 110 V, 하반구 0 V → A₀=55, A₁=165/2, A₂=0, A₃=−385/8."""
+    r, theta = np.array([0., .5, 1.]), np.linspace(0, 2*np.pi, 8, endpoint=False)
+    _, coefficients = sphere_potential(lambda mu: np.where(mu > 0, 110., 0.), r, theta, 1., 4, 1001)
+    np.testing.assert_allclose(coefficients, [55, 82.5, 0, -48.125], atol=1e-9)
+    # 외부해는 무한대에서 점전하 55/r처럼 감쇠합니다 (교재 식 24).
+    far = np.array([1e5])
+    field, _ = sphere_potential(lambda mu: np.where(mu > 0, 110., 0.), far, theta, 1., 4, 1001, exterior=True)
+    np.testing.assert_allclose(field, 55/1e5, rtol=1e-4)
+
+
+def test_disk_potential_jump_boundary():
+    """원판 경계의 도약(연습문제 12.10-5형): 계수가 해석값 aₙ=0, bₙ=2·220(1−cos nπ)/(nπ)·½와 일치합니다."""
+    r, theta = np.linspace(0, 1, 5), np.linspace(0, 2*np.pi, 16, endpoint=False)
+    boundary = lambda t: np.where(np.sin(t) > 0, 220., 0.)
+    _, constant, coefficients = disk_potential(boundary, r, theta, 1., 5, 1024)
+    assert constant == pytest.approx(110, abs=1e-9)
+    for n, cosine, sine in coefficients:
+        assert cosine == pytest.approx(0, abs=1e-9)
+        assert sine == pytest.approx(220*(1-np.cos(n*np.pi))/(n*np.pi), abs=1e-9)
+
+
+def test_disk_membrane_textbook_drum():
+    """교재 12.10 예제 1: f=1−r², R=1 → Aₘ=8/(αₘ³J₁(αₘ)) = 1.10801, −0.13978, 0.04548."""
+    result = get_topic('disk_membrane').compute({'initial': '1-r^2', 'radius': 1., 'speed': 2., 'angular_count': 0})
+    roots = jn_zeros(0, 3)
+    exact = 8/(roots**3*jv(1, roots))
+    np.testing.assert_allclose([row[3] for row in result.tables['모드 계수'][1][:3]], exact, rtol=1e-10)
+
+
+def test_retired_infinite_heat_order_setting(tmp_path):
+    import json
+    from engineering_math.core.project import load_settings
+    path = tmp_path/'old.json'
+    path.write_text(json.dumps({'version': 2, 'topic': 'infinite_heat', 'params': {'order': 80, 'alpha': .3}}), encoding='utf-8')
+    params = load_settings(path)['params']
+    assert 'order' not in params and params['alpha'] == .3
+
+
+def test_rectangle_laplace_single_mode_exact():
+    from engineering_math.core.chapter12 import rectangle_laplace
+    x, y = np.linspace(0, 2, 41), np.linspace(0, 3, 61)
+    field, _ = rectangle_laplace({'top': lambda s: np.sin(np.pi*s/2)}, x, y, 2., 3., 10)
+    exact = np.sin(np.pi*x[:, None]/2)*np.sinh(np.pi*y[None, :]/2)/np.sinh(np.pi*3/2)
+    np.testing.assert_allclose(field, exact, atol=1e-12)
+
+
+def test_rectangle_laplace_symmetry_and_superposition():
+    one = get_topic('rectangle_laplace').compute({'top': '1', 'N': 101, 'num_points': 101})
+    assert one.metrics['중심 온도'] == pytest.approx(.25, abs=1e-12)
+    allsides = get_topic('rectangle_laplace').compute({'top': '1', 'bottom': '1', 'left': '1', 'right': '1', 'N': 101})
+    interior = allsides.data['field'][20:-20, 20:-20]
+    np.testing.assert_allclose(interior, 1, atol=1e-3)
+
+
+def test_rectangle_laplace_large_modes_do_not_overflow():
+    result = get_topic('rectangle_laplace').compute({'top': '1', 'length': .05, 'height': 100., 'N': 200})
+    assert np.all(np.isfinite(result.data['field']))
+
+
+@pytest.mark.parametrize('params,kind,phi', [
+    ({'C': '4'}, '타원형', None),
+    ({'C': '-16'}, '쌍곡선형', {'-4*x + y', '4*x + y'}),
+    ({'B': '1', 'C': '1'}, '포물선형', {'-x + y'}),
+    ({'B': '5/2', 'C': '4'}, '쌍곡선형', {'-4*x + y', '-x + y'})])
+def test_pde_classification_constant_coefficients(params, kind, phi):
+    result = get_topic('pde_classification').compute(params)
+    assert dict(result.tables['분류'][1])['형태'] == kind
+    rows = dict(result.tables['특성과 표준형'][1])
+    if kind == '쌍곡선형':
+        assert {rows['특성 Φ = 상수'], rows['특성 Ψ = 상수']} == phi
+    elif kind == '포물선형':
+        assert {rows['특성 Φ = Ψ = 상수']} == phi and rows['표준형'].startswith('u_vv')
+    else:
+        assert rows['표준형'].startswith('u_vv + u_ww')
+
+
+def test_tricomi_is_mixed_and_characteristics_stay_hyperbolic():
+    result = get_topic('pde_classification').compute({'A': 'y', 'C': '1'})
+    d = result.data
+    assert d['label'].startswith('혼합형')
+    assert result.metrics['쌍곡선형 영역 비율'] == pytest.approx(.5, abs=.02)
+    assert d['curves']
+    for _, path in d['curves']:
+        finite = path[np.isfinite(path[:, 1])]
+        assert np.all(finite[:, 1] <= 1e-9)
+
+
+def test_pde_classification_rejects_zero_principal_part():
+    with pytest.raises(ValueError, match='2계'):
+        get_topic('pde_classification').compute({'A': '0', 'B': '0', 'C': '0'})
+
+
+@pytest.mark.parametrize('name', [name for name in get_topic('pde_basics').examples if name.startswith('연습문제')])
+def test_solve_like_ode_examples_have_zero_residual(name):
+    topic = get_topic('pde_basics')
+    result = topic.compute(topic.examples[name])
+    assert dict(result.tables['풀이'][1])['대입 검산 잔차'] == '0'
+
+
+def test_solve_like_ode_rejects_non_differential_equation():
+    with pytest.raises(ValueError, match='미분방정식'):
+        get_topic('pde_basics').compute({'mode': '상미분방정식처럼 풀기', 'a': '0', 'b': '0'})

@@ -329,5 +329,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.cancel()
+        self.job.shutdown()
         self.clear_output()
         event.accept()

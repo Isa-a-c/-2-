@@ -9,6 +9,10 @@ from .models import validate_params
 from engineering_math.topics import get_topic
 
 
+# 계산 방식이 바뀌어 의미가 사라진 이전 설정 항목입니다. 불러올 때 제거하고 기본값을 씁니다.
+RETIRED_KEYS = {'infinite_heat': ('order',)}
+
+
 def settings(topic, params):
     return {'version': 2, 'topic': topic, 'params': validate_params(get_topic(topic).inputs, params)}
 
@@ -29,7 +33,15 @@ def load_settings(path):
         data = {'version': 2, 'topic': 'fourier', 'params': params}
     if data.get('version') != 2:
         raise ValueError('지원하지 않는 설정 버전입니다.')
-    return settings(data['topic'], data['params'])
+    params = data.get('params')
+    if isinstance(params, dict):
+        params = {key: value for key, value in params.items()
+                  if key not in RETIRED_KEYS.get(data.get('topic'), ())}
+        # 주제가 이전 값의 이름 변경 규칙(migrate)을 제공하면 적용합니다.
+        topic = get_topic(data['topic']) if isinstance(data.get('topic'), str) else None
+        if topic is not None and hasattr(topic, 'migrate'):
+            params = topic.migrate(params)
+    return settings(data['topic'], params)
 
 
 def save_settings(path, topic, params):

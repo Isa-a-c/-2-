@@ -18,6 +18,14 @@ def sine_coefficients(x, values, length, count):
     return calculate_fourier_coefficients(odd_x, odd_y, length, count)[2]
 
 
+def cosine_coefficients(x, values, length, count):
+    """[0, ell] 함수를 우확장하여 A₀=(1/ell)∫f, Aₙ=(2/ell)∫f cos(nπx/ell)를 계산합니다."""
+    even_x = np.r_[-x[:0:-1], x]
+    even_y = np.r_[values[:0:-1], values]
+    a0, an, _ = calculate_fourier_coefficients(even_x, even_y, length, count)
+    return a0, an
+
+
 def sine_basis(x, length, count):
     return np.sin(np.arange(1, count+1)[:, None]*np.pi*x/length)
 
@@ -27,8 +35,10 @@ def heat_accuracy(expression, params, coefficients):
 
     격자 간 변화는 참해에 대한 오차 상한이 아닙니다. t=0 재구성 오차는
     초기 입력과 비교하며, 최종 시간의 차이는 두 근사 해끼리 비교합니다.
+    params['mode']가 '양 끝 단열'이면 코사인 급수, 아니면 고정 온도의 사인 급수입니다.
     """
     length, count, points = params['length'], params['N'], params['num_points']
+    insulated = params.get('mode') == '양 끝 단열'
     higher_count = min(2*count, 200, points-2)
     evaluation_x = np.linspace(0, length, 2049)
 
@@ -37,17 +47,27 @@ def heat_accuracy(expression, params, coefficients):
 
     def integrate(sample_count, order):
         grid = np.linspace(0, length, sample_count)
-        residual = evaluate(expression, (grid, length), ('x', 'ell'))-steady(grid)
-        return sine_coefficients(grid, residual, length, order)
+        values = evaluate(expression, (grid, length), ('x', 'ell'))
+        if insulated:
+            return np.r_[cosine_coefficients(grid, values, length, order)]
+        return sine_coefficients(grid, values-steady(grid), length, order)
 
     refined = integrate(2*points-1, count)
     higher = integrate(points, higher_count)
     initial = evaluate(expression, (evaluation_x, length), ('x', 'ell'))
+    if insulated:
+        grid = np.linspace(0, length, points)
+        coefficients = np.r_[cosine_coefficients(grid, evaluate(expression, (grid, length), ('x', 'ell')), length, count)]
 
     def snapshots(values):
+        times = np.array([0., params['end_time']])[:, None]
+        if insulated:
+            wave_numbers = np.arange(len(values))*np.pi/length
+            basis = np.cos(wave_numbers[:, None]*evaluation_x)
+            return np.exp(-params['alpha']*times*wave_numbers**2) @ (values[:, None]*basis)
         wave_numbers = np.arange(1, len(values)+1)*np.pi/length
         basis = sine_basis(evaluation_x, length, len(values))
-        frames = np.exp(-params['alpha']*np.array([0., params['end_time']])[:, None]*wave_numbers**2) @ (values[:, None]*basis)
+        frames = np.exp(-params['alpha']*times*wave_numbers**2) @ (values[:, None]*basis)
         frames += steady(evaluation_x)
         frames[:, 0], frames[:, -1] = params['left'], params['right']
         return frames
@@ -56,7 +76,7 @@ def heat_accuracy(expression, params, coefficients):
     rows = []
     for label, sample_count, values in [('기준', points, coefficients), ('표본 수 증가', 2*points-1, refined), ('차수 증가', points, higher)]:
         frames = snapshots(values)
-        rows.append([label, sample_count, len(values),
+        rows.append([label, sample_count, len(values) - insulated,
                      float(np.sqrt(np.mean((frames[0]-initial)**2))),
                      float(np.max(np.abs(frames[0]-baseline[0]))),
                      float(np.max(np.abs(frames[1]-baseline[1])))])

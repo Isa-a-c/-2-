@@ -88,7 +88,7 @@ def test_common_ui_routes_settings_and_lazy_canvas(tmp_path):
             window.tabs.setCurrentIndex(index)
         assert len(window.tabs.findChildren(FigureCanvasQTAgg)) == len(window.figures)
         window.calculate()
-        assert window.result is result and window.job.process is None
+        assert window.result is result and not window.job.busy
 
         # 기존 JSON v2의 반무한 열전도 모드는 파동으로 덮어쓰지 않습니다.
         path = tmp_path / 'heat.json'
@@ -103,3 +103,13 @@ def test_common_ui_routes_settings_and_lazy_canvas(tmp_path):
     finally:
         window.close()
         app.processEvents()
+
+
+@pytest.mark.parametrize('topic_id', list(dict.fromkeys(item.topic for item in EXPERIMENTS)))
+def test_animation_contract(topic_id):
+    """재생 버튼이 켜지는 주제는 animation()이 프레임과 라벨을 돌려주어야 합니다."""
+    topic = get_topic(topic_id)
+    if not getattr(topic, 'supports_animation', True):
+        return
+    spec = topic.animation(topic.compute({}))
+    assert len(spec['frames']) == len(spec['labels']) > 0

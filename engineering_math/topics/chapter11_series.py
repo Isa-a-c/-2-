@@ -124,19 +124,55 @@ class ForcedTopic(StaticTopic):
         curves = {'Initial-value response': state[0]}
         if particular is not None:
             curves['Periodic particular solution'] = particular
-        tables = {'외력 성분': (['n', 'omega', 'a_n', 'b_n', 'resonant'],
-                  [[i + 1, frequencies[i], an[i], bn[i], bool(resonant[i])] for i in range(p['N'])]),
+        # 교재 식 (5)·(6): 성분별 정상상태 응답 yₙ=Aₙcos ωₙt+Bₙsin ωₙt의 진폭 Cₙ=√(Aₙ²+Bₙ²).
+        denominator = p['stiffness'] - p['mass'] * frequencies ** 2 + 1j * p['damping'] * frequencies
+        forcing = np.hypot(an, bn)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            response = np.where(resonant, np.inf, forcing / np.abs(denominator))
+        response[(forcing == 0) & ~resonant] = 0.
+        natural = np.sqrt(p['stiffness'] / p['mass'])
+        tables = {'외력 성분': (['n', 'omega', 'a_n', 'b_n', 'input amplitude', 'response amplitude C_n', 'gain 1/|D_n|', 'resonant'],
+                  [[i + 1, frequencies[i], an[i], bn[i], forcing[i], response[i], 1 / abs(denominator[i]) if not resonant[i] else np.inf,
+                    bool(resonant[i])] for i in range(p['N'])]),
                   '응답': (['t', 'F_N', 'y', 'velocity'], np.column_stack((time, force, state.T)))}
         notices = ['교재 11.3, 22쪽. 원래 외력 대신 유한 Fourier 부분합에 대한 초기값 문제를 계산합니다.',
                    '무감쇠계의 주기 특수해는 초기값 응답의 장시간 극한을 뜻하지 않습니다.']
+        metrics = {'최대 |y|': float(np.max(np.abs(state[0]))), '공진 성분 수': int(resonant.sum()),
+                   '고유 각진동수 √(k/m)': float(natural)}
         if np.any(resonant):
             notices.append('활성 외력 성분에 무감쇠 공진이 있습니다. 유계 주기 특수해를 표시하지 않으며 시간 응답의 증가를 관찰하십시오.')
-        return Result(self.id, p, {'최대 |y|': float(np.max(np.abs(state[0]))), '공진 성분 수': int(resonant.sum())},
-                      tables, dict(x=time, curves=curves, force=force, state=state, resonant=resonant, particular=particular), notices)
+        elif np.any(response > 0):
+            order = np.argsort(response)[::-1]
+            dominant = order[0]
+            metrics['지배 성분 n'] = int(dominant + 1)
+            metrics['지배 성분 진폭 C_n'] = float(response[dominant])
+            text = f'정상상태 응답에서 n={dominant + 1} 성분(ω={frequencies[dominant]:.4g})이 가장 큽니다: C={response[dominant]:.4g}.'
+            if len(order) > 1 and response[order[1]] > 0:
+                text += f' 다음은 n={order[1] + 1} (C={response[order[1]]:.4g}), 비율 {response[order[1]] / response[dominant]:.3g}입니다.'
+            text += f' 고유 각진동수 {natural:.4g}에 가까운 외력 성분이 작은 입력 진폭으로도 응답을 지배합니다(교재 예제 1의 C₅).'
+            notices.insert(1, text)
+        return Result(self.id, p, metrics, tables,
+                      dict(x=time, curves=curves, force=force, state=state, resonant=resonant, particular=particular,
+                           frequencies=frequencies, input_amplitude=forcing, response_amplitude=response, natural=natural), notices)
 
     def figures(self, result):
         figures = super().figures(result)
-        figures['외력'] = line_figure(result.data['x'], {'F_N(t)': result.data['force']}, 'Truncated periodic force', 't')
+        d = result.data
+        figures['외력'] = line_figure(d['x'], {'F_N(t)': d['force']}, 'Truncated periodic force', 't')
+        figure = Figure(figsize=(8, 5), layout='constrained')
+        axes = figure.subplots(2, 1, sharex=True)
+        omega = d['frequencies']
+        width = .35 * (omega[1] - omega[0]) if len(omega) > 1 else .3
+        axes[0].bar(omega, d['input_amplitude'], width=width, color='tab:gray')
+        axes[0].set(ylabel='Input amplitude', title='Force harmonics and steady-state response amplitudes')
+        finite = np.where(np.isfinite(d['response_amplitude']), d['response_amplitude'], np.nan)
+        axes[1].bar(omega, finite, width=width, color='tab:red')
+        axes[1].axvline(d['natural'], color='k', ls='--', lw=1, label='natural frequency √(k/m)')
+        axes[1].set(xlabel='omega_n', ylabel='Response amplitude C_n')
+        axes[1].legend()
+        for axis in axes:
+            axis.grid(alpha=.3)
+        figures['응답 진폭 스펙트럼'] = figure
         return figures
 
 
@@ -228,20 +264,35 @@ class OrthogonalTopic(StaticTopic):
 class SturmTopic(OrthogonalTopic):
     id = 'sturm_liouville'
     title = '11.5 · Sturm–Liouville 고유함수'
-    description = '상수계수 (p y′)′+(q+λr)y=0의 DD·NN·DN 경계조건을 비교합니다. 임의 가변계수 해석기는 아닙니다.'
+    description = '상수계수 (p y′)′+(q+λr)y=0의 DD·NN·DN·주기·일반(Robin) 경계조건을 비교합니다. 임의 가변계수 해석기는 아닙니다.'
+    BOUNDARIES = ('DD', 'NN', 'DN', 'Periodic', 'Robin')
     inputs = FUNCTION_INPUTS + SERIES_INPUTS + (
-        InputSpec('mode', '경계조건', 'choice', 'DD', choices=('DD', 'NN', 'DN')),
+        InputSpec('mode', '경계조건', 'choice', 'DD', choices=BOUNDARIES),
         InputSpec('p', '계수 p > 0', 'float', 1., .01, 100),
         InputSpec('q', '계수 q', 'float', 0., -100, 100),
         InputSpec('r', '가중치 r > 0', 'float', 1., .01, 100),
+        InputSpec('k1', 'k₁ (k₁y(0)+k₂y′(0)=0)', 'float', 1., -100, 100, visible_in=('Robin',)),
+        InputSpec('k2', 'k₂', 'float', 0., -100, 100, visible_in=('Robin',)),
+        InputSpec('l1', 'l₁ (l₁y(L)+l₂y′(L)=0)', 'float', 1., -100, 100, visible_in=('Robin',)),
+        InputSpec('l2', 'l₂', 'float', 1., -100, 100, visible_in=('Robin',)),
     )
     examples = {'양 끝 고정 DD': {}, '양 끝 기울기 0 NN': {'mode': 'NN', 'function': '1'},
-                '혼합 경계 DN': {'mode': 'DN'}, '고유값 이동': {'q': 2.}}
+                '혼합 경계 DN': {'mode': 'DN'}, '고유값 이동': {'q': 2.},
+                '주기 경계 (중복 고유값)': {'mode': 'Periodic', 'L': '2*pi'},
+                'Robin: y(0)=0, y(L)+y′(L)=0': {'mode': 'Robin'},
+                'Robin: 음의 고유값이 생기는 경우': {'mode': 'Robin', 'k1': 1., 'k2': 1., 'l1': 1., 'l2': 0.}}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
         length = positive_length(p['L'])
         x, y = sample(p, 0, length)
-        basis, eigenvalues = sturm_basis(x, length, p['N'], p['mode'], p['p'], p['q'], p['r'])
-        return self.projection_result(p, x, y, basis, np.full_like(x, p['r']), eigenvalues,
+        robin = (p['k1'], p['k2'], p['l1'], p['l2'])
+        basis, eigenvalues = sturm_basis(x, length, p['N'], p['mode'], p['p'], p['q'], p['r'], robin)
+        notes = {'Periodic': '주기 경계 y(0)=y(L), y′(0)=y′(L)(식 7): 상수 모드 하나와 n≥1마다 cos·sin 두 모드가 같은 고유값을 가집니다.',
+                 'Robin': f'일반 경계(식 2): {robin[0]:g}y(0)+{robin[1]:g}y′(0)=0, {robin[2]:g}y(L)+{robin[3]:g}y′(L)=0. '
+                          '고유값은 특성 행렬식의 근이며 κ²<0(쌍곡선 해)인 음의 고유값도 포함합니다. 고유함수는 최댓값 1로 맞춥니다.'}
+        result = self.projection_result(p, x, y, basis, np.full_like(x, p['r']), eigenvalues,
             '교재 11.5, 29쪽의 부호: λ=(pκ²−q)/r. D는 y=0, N은 y′=0이며 DN은 왼쪽 D·오른쪽 N입니다. NN은 상수 모드를 포함합니다.')
+        if p['mode'] in notes:
+            result.notices.insert(0, notes[p['mode']])
+        return result

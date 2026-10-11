@@ -12,11 +12,11 @@ from engineering_math.topics.catalog import EXPERIMENTS
 def wait_for_job(application, window):
     deadline = time.monotonic()+90
     pulses = 0
-    while window.job.process is not None and time.monotonic() < deadline:
+    while window.job.busy and time.monotonic() < deadline:
         application.processEvents()
         pulses += 1
         time.sleep(.01)
-    assert window.job.process is None, '계산 완료 대기 시간이 초과되었습니다.'
+    assert not window.job.busy, '계산 완료 대기 시간이 초과되었습니다.'
     return pulses
 
 
@@ -66,7 +66,7 @@ def run(application, window, report_path):
         window.form.set_values({'N': 20})
         window.calculate()
         wait_for_job(application, window)
-        assert not errors and window.result is previous and window.job.process is None
+        assert not errors and window.result is previous and not window.job.busy
         checks.append('잘못된 입력 이후 복구 및 성공 캐시 보존')
         for mode in MODES:
             result = window.topic.compute({'mode': mode})
@@ -85,7 +85,7 @@ def run(application, window, report_path):
         window.selector.setCurrentIndex(window.selector.findData('heat'))
         result = window.topic.compute({})
         window.present(result)
-        assert window.tabs.count() == 6 and not errors, errors
+        assert window.tabs.count() == 7 and not errors, errors
         checks.append('열방정식 곡선·히트맵·수치 표 표시')
         application.processEvents()
         screenshot = Path(report_path).with_suffix('.png')
@@ -98,11 +98,11 @@ def run(application, window, report_path):
         checks.append('열방정식 애니메이션 마지막 프레임')
         window.calculate()
         window.selector.setCurrentIndex(window.selector.findData('wave'))
-        assert window.job.process is None and window.result is None
+        assert not window.job.busy and window.result is None
         window.calculate()
         wait_for_job(application, window)
         result = window.result
-        assert result.topic == 'wave' and window.tabs.count() == 7 and not errors, errors
+        assert result.topic == 'wave' and window.tabs.count() == 10 and not errors, errors
         checks.append('계산 중 주제 변경 및 파동 비동기 계산·열 비교 그래프')
         window.resize(1000, 700)
         application.processEvents()
@@ -175,7 +175,9 @@ def run(application, window, report_path):
         assert '매개변수' in window.tabs.currentWidget().toPlainText()
         checks.append('확장 함수 및 공통 매개변수 입력·도움말')
         # 교재 순서의 새 주제 모두를 실제 작업 프로세스와 Qt 화면으로 검증합니다.
-        for topic_id in list(dict.fromkeys(item.topic for item in EXPERIMENTS))[1:10]:
+        chapter11_ids = list(dict.fromkeys(item.topic for item in EXPERIMENTS
+                                           if item.lesson.startswith('11.') and item.topic != 'fourier'))
+        for topic_id in chapter11_ids:
             window.selector.setCurrentIndex(window.selector.findData(topic_id))
             window.calculate()
             wait_for_job(application, window)
@@ -186,8 +188,8 @@ def run(application, window, report_path):
         window.tabs.setCurrentIndex(0)
         application.processEvents()
         window.grab().save(str(Path(report_path).with_name('chapter11-window.png')))
-        checks.append('11.2~11.10 전체 주제의 비동기 계산·그래프·학습 설명')
-        chapter12_ids = ['pde_basics', 'dalembert', 'infinite_heat', 'rectangle_membrane',
+        checks.append('11.2~11.10 전체 주제(DFT 포함)의 비동기 계산·그래프·학습 설명')
+        chapter12_ids = ['pde_basics', 'dalembert', 'rectangle_laplace', 'infinite_heat', 'rectangle_membrane',
                          'disk_membrane', 'coordinate_potential', 'pde_laplace']
         for topic_id in chapter12_ids:
             window.selector.setCurrentIndex(window.selector.findData(topic_id))

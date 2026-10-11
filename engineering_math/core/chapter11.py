@@ -60,8 +60,12 @@ def orthogonal_basis(kind, x, count, length=1., bessel_order=0):
     return basis, x, (roots / length) ** 2
 
 
-def sturm_basis(x, length, count, boundary, p=1., q=0., r=1.):
-    """교재 부호 (p y')' + (q + λr)y=0, 상수 p,r>0의 정확한 기저."""
+def sturm_basis(x, length, count, boundary, p=1., q=0., r=1., robin=(1., 0., 1., 0.)):
+    """교재 부호 (p y')' + (q + λr)y=0, 상수 p,r>0의 고유함수와 고유값 λ=(pκ²−q)/r.
+
+    boundary: DD·NN·DN, 'Periodic'(y(0)=y(L), y'(0)=y'(L), 식 7), 'Robin'(식 2:
+    k₁y(0)+k₂y'(0)=0, l₁y(L)+l₂y'(L)=0, robin=(k₁,k₂,l₁,l₂)).
+    """
     if boundary == 'DD':
         frequencies = np.arange(1, count + 1) * np.pi / length
         basis = np.sin(frequencies[:, None] * x)
@@ -71,9 +75,75 @@ def sturm_basis(x, length, count, boundary, p=1., q=0., r=1.):
     elif boundary == 'DN':
         frequencies = (np.arange(count) + .5) * np.pi / length
         basis = np.sin(frequencies[:, None] * x)
+    elif boundary == 'Periodic':
+        # 상수 모드 하나와 각 n≥1의 cos·sin 두 모드(중복 고유값)입니다.
+        orders = (np.arange(count) + 1) // 2
+        frequencies = 2 * np.pi * orders / length
+        basis = np.where((np.arange(count) % 2 == 1)[:, None], np.cos(frequencies[:, None] * x),
+                         np.sin(frequencies[:, None] * x))
+        basis[0] = 1.
+    elif boundary == 'Robin':
+        squared, basis = robin_modes(x, length, count, *robin)
+        return basis, (p * squared - q) / r
     else:
-        raise ValueError('지원하는 경계조건은 DD, NN, DN입니다.')
+        raise ValueError('지원하는 경계조건은 DD, NN, DN, Periodic, Robin입니다.')
     return basis, (p * frequencies ** 2 - q) / r
+
+
+def robin_modes(x, length, count, k1, k2, l1, l2):
+    """y''+κ²y=0의 Robin 문제에서 κ² 오름차순 고유값과 고유함수를 구합니다.
+
+    y(0)조건을 만족하는 해는 y=k₂κ cos κx − k₁ sin κx (κ²>0), y=k₂ − k₁x (κ=0),
+    y=k₂μ cosh μx − k₁ sinh μx (κ²=−μ²<0)이고, 오른쪽 조건의 값이 0이 되는 κ를 찾습니다.
+    """
+    from scipy.optimize import brentq
+    if (k1 == 0 and k2 == 0) or (l1 == 0 and l2 == 0):
+        raise ValueError('각 끝의 경계조건 계수가 모두 0일 수는 없습니다.')
+
+    def trig(kappa):
+        return k1 * (l1 * np.sin(kappa * length) + l2 * kappa * np.cos(kappa * length)) \
+            - k2 * kappa * (l1 * np.cos(kappa * length) - l2 * kappa * np.sin(kappa * length))
+
+    def hyperbolic(mu):
+        # cosh(μL)로 나누어 넘침을 피합니다. 근의 위치는 바뀌지 않습니다.
+        t = np.tanh(mu * length)
+        return k1 * (l1 * t + l2 * mu) - k2 * mu * (l1 + l2 * mu * t)
+
+    def roots(function, upper, samples):
+        grid = np.linspace(1e-9, upper, samples)
+        values = function(grid)
+        found = []
+        for a, b, fa, fb in zip(grid[:-1], grid[1:], values[:-1], values[1:]):
+            if fa == 0:
+                found.append(a)
+            elif fa * fb < 0:
+                found.append(brentq(function, a, b, xtol=1e-14))
+        return found
+
+    squared = [-(mu ** 2) for mu in roots(hyperbolic, 50 / length, 20000)]
+    if abs(k1 * (l1 * length + l2) - k2 * l1) < 1e-12:
+        squared.append(0.)
+    upper = (count + 2) * np.pi / length
+    trig_roots = roots(trig, upper, 400 * (count + 2))
+    while len(squared) + len(trig_roots) < count:
+        upper *= 2
+        trig_roots = roots(trig, upper, 400 * int(upper * length / np.pi + 2))
+    squared = sorted(squared + [kappa ** 2 for kappa in trig_roots])[:count]
+    modes = []
+    for value in squared:
+        if value > 0:
+            kappa = np.sqrt(value)
+            modes.append(k2 * kappa * np.cos(kappa * x) - k1 * np.sin(kappa * x))
+        elif value < 0:
+            mu = np.sqrt(-value)
+            # 큰 μ에서도 유한하도록 e^(μL)로 나눈 형태를 씁니다.
+            scale = np.exp(-mu * length)
+            modes.append(scale * (k2 * mu * np.cosh(mu * x) - k1 * np.sinh(mu * x)))
+        else:
+            modes.append(k2 - k1 * x)
+    basis = np.array(modes)
+    basis /= np.max(np.abs(basis), axis=1, keepdims=True)
+    return np.array(squared), basis
 
 
 # ── 주기 외력의 Fourier 성분과 운동방정식 ────────────────────────
