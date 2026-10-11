@@ -217,9 +217,7 @@ class OrthogonalTopic(StaticTopic):
         InputSpec('mode', '직교기저', 'choice', 'Legendre', choices=('Legendre', 'Bessel')),
         InputSpec('nu', 'Bessel 차수 ν', 'int', 0, 0, 5, visible_in=('Bessel',)),
     )
-    examples = {'Legendre x²': {'function': 'x^2', 'N': 6},
-                'Bessel 상수': {'function': '1', 'mode': 'Bessel', 'L': '1'},
-                'Bessel 포물선': {'function': '1-x^2', 'mode': 'Bessel', 'L': '1'}}
+    examples = {'Bessel 상수': {'function': '1', 'mode': 'Bessel', 'L': '1'}}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -276,9 +274,8 @@ class SturmTopic(OrthogonalTopic):
         InputSpec('l1', 'l₁ (l₁y(L)+l₂y′(L)=0)', 'float', 1., -100, 100, visible_in=('Robin',)),
         InputSpec('l2', 'l₂', 'float', 1., -100, 100, visible_in=('Robin',)),
     )
-    examples = {'양 끝 고정 DD': {}, '양 끝 기울기 0 NN': {'mode': 'NN', 'function': '1'},
+    examples = {'양 끝 기울기 0 NN': {'mode': 'NN', 'function': '1'},
                 '혼합 경계 DN': {'mode': 'DN'}, '고유값 이동': {'q': 2.},
-                '주기 경계 (중복 고유값)': {'mode': 'Periodic', 'L': '2*pi'},
                 'Robin: y(0)=0, y(L)+y′(L)=0': {'mode': 'Robin'},
                 'Robin: 음의 고유값이 생기는 경우': {'mode': 'Robin', 'k1': 1., 'k2': 1., 'l1': 1., 'l2': 0.}}
 

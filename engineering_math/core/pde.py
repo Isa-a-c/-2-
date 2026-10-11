@@ -1,6 +1,6 @@
 """열·파동방정식에서 공유하는 사인 급수와 격자 비교입니다."""
 import numpy as np
-from .fourier import calculate_fourier_coefficients
+from .fourier import half_range_coefficients
 from .expr import evaluate
 
 
@@ -11,19 +11,13 @@ def evolution_animation(x, time, initial, frames, ylabel='u'):
 
 
 def sine_coefficients(x, values, length, count):
-    """[0, ell] 함수를 기확장하여 (2/ell) 사인 적분을 계산합니다."""
-    odd_x = np.r_[-x[:0:-1], x]
-    odd_y = np.r_[-values[:0:-1], values]
-    odd_y[len(x)-1] = 0.
-    return calculate_fourier_coefficients(odd_x, odd_y, length, count)[2]
+    """[0, ell] 함수의 사인 계수 (2/ell)∫f sin(nπx/ell)dx (기확장의 Fourier 계수와 같음)."""
+    return half_range_coefficients(x, values, length, count, False)[1]
 
 
 def cosine_coefficients(x, values, length, count):
-    """[0, ell] 함수를 우확장하여 A₀=(1/ell)∫f, Aₙ=(2/ell)∫f cos(nπx/ell)를 계산합니다."""
-    even_x = np.r_[-x[:0:-1], x]
-    even_y = np.r_[values[:0:-1], values]
-    a0, an, _ = calculate_fourier_coefficients(even_x, even_y, length, count)
-    return a0, an
+    """[0, ell] 함수를 우확장한 A₀=(1/ell)∫f, Aₙ=(2/ell)∫f cos(nπx/ell)입니다."""
+    return half_range_coefficients(x, values, length, count, True)
 
 
 def sine_basis(x, length, count):

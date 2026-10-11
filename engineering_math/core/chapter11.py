@@ -1,7 +1,8 @@
 """교재 11장의 UI 독립 수치 계산입니다. 적분은 유한 표본의 근사입니다."""
 import numpy as np
 from scipy.special import eval_legendre, jn_zeros, jv
-from scipy.integrate import solve_ivp
+# 사다리꼴 가중치와 반구간 계수는 core.fourier의 공통 구현을 씁니다(chapter12도 여기서 가져옵니다).
+from .fourier import trapezoid_weights, half_range_coefficients
 
 
 # ── 공통 적분과 유한성 검사 ──────────────────────────────────────
@@ -10,17 +11,6 @@ def checked(values):
     if not np.all(np.isfinite(array)):
         raise ValueError('계산 결과가 유한하지 않습니다. 입력 크기와 구간을 확인하십시오.')
     return array
-
-
-def trapezoid_weights(x):
-    x = checked(np.asarray(x, dtype=float))
-    if x.ndim != 1 or len(x) < 2 or np.any(np.diff(x) <= 0):
-        raise ValueError('적분 격자는 증가하는 1차원 배열이어야 합니다.')
-    weights = np.empty_like(x)
-    weights[0] = (x[1] - x[0]) / 2
-    weights[-1] = (x[-1] - x[-2]) / 2
-    weights[1:-1] = (x[2:] - x[:-2]) / 2
-    return weights
 
 
 def project_basis(x, values, basis, weight=None):
@@ -41,11 +31,10 @@ def project_basis(x, values, basis, weight=None):
 
 
 def half_range(x, values, length, order, cosine):
-    harmonics = np.arange(1, order + 1)
-    angles = harmonics[:, None] * np.pi * x / length
+    """반구간 계수와 차수별 누적 부분합입니다."""
+    constant, coefficients = half_range_coefficients(x, values, length, order, cosine)
+    angles = np.arange(1, order + 1)[:, None] * np.pi * x / length
     waves = np.cos(angles) if cosine else np.sin(angles)
-    coefficients = 2 / length * np.trapezoid(waves * values, x=x, axis=1)
-    constant = float(np.trapezoid(values, x=x) / length) if cosine else 0.
     return constant, checked(coefficients), checked(constant + np.cumsum(coefficients[:, None] * waves, axis=0))
 
 
@@ -147,32 +136,60 @@ def robin_modes(x, length, count, k1, k2, l1, l2):
 
 
 # ── 주기 외력의 Fourier 성분과 운동방정식 ────────────────────────
+def homogeneous_motion(time, mass, damping, stiffness, y0, v0):
+    """m y″+c y′+k y=0, y(0)=y0, y′(0)=v0의 닫힌 해와 속도입니다.
+
+    σ=−c/(2m), q=√(σ²−k/m)(복소수 허용)이면 y=y0·C+(v0−σy0)·S이고
+    C=½(e^((σ+q)t)+e^((σ−q)t)), S=(e^((σ+q)t)−e^((σ−q)t))/(2q)입니다.
+    부족감쇠(q 허수)·과감쇠(q 실수)·임계감쇠(q→0, S=t·e^(σt))를 한 식으로 다루며,
+    지수 형태로 계산하여 큰 t에서도 cosh·sinh가 넘치지 않습니다.
+    """
+    sigma = -damping / (2 * mass)
+    q = np.sqrt(complex(sigma * sigma - stiffness / mass))
+    t = np.asarray(time, dtype=float)
+    if abs(q) * max(float(t.max()), 1e-300) < 1e-8:
+        base = np.exp(sigma * t)
+        c_part, s_part = base, t * base
+        c_rate, s_rate = sigma * base, base * (1 + sigma * t)
+    else:
+        plus, minus = np.exp((sigma + q) * t), np.exp((sigma - q) * t)
+        c_part, s_part = (plus + minus) / 2, (plus - minus) / (2 * q)
+        c_rate = ((sigma + q) * plus + (sigma - q) * minus) / 2
+        s_rate = ((sigma + q) * plus - (sigma - q) * minus) / (2 * q)
+    weight = v0 - sigma * y0
+    return np.real(y0 * c_part + weight * s_part), np.real(y0 * c_rate + weight * s_rate)
+
+
 def forced_response(time, length, a0, an, bn, mass, damping, stiffness, y0, v0):
+    """m y″+c y′+k y = a₀+Σ(aₙcos ωₙt+bₙsin ωₙt), ωₙ=nπ/L의 초기값 문제를 닫힌 해로 풉니다.
+
+    특수해: 상수 a₀/k와 성분별 Re[(aₙ−ibₙ)/(k−mωₙ²+icωₙ)·e^(iωₙt)].
+    무감쇠 공진 성분(분모 0)은 t/(2mω)·(a sin ωt − b cos ωt)입니다.
+    동차해는 초기조건에서 특수해의 초기값을 뺀 값으로 맞춥니다. 수치 시간 적분을 쓰지 않습니다.
+    """
+    time = np.asarray(time, dtype=float)
     frequencies = np.arange(1, len(an) + 1) * np.pi / length
-    step = min(.05, .2 / max(frequencies[-1], np.sqrt(stiffness / mass), damping / mass))
-    if time[-1] / step > 100000:
-        raise ValueError('필요한 적분 단계가 너무 많습니다. 시간·차수를 줄이거나 주기를 늘리십시오.')
-
-    def forcing(t):
-        return a0 + an @ np.cos(frequencies * t) + bn @ np.sin(frequencies * t)
-
-    def rhs(t, state):
-        return [state[1], (forcing(t) - damping * state[1] - stiffness * state[0]) / mass]
-
-    solution = solve_ivp(rhs, (0., float(time[-1])), [y0, v0], t_eval=time,
-                         method='DOP853', rtol=1e-9, atol=1e-11, max_step=step)
-    if not solution.success:
-        raise ValueError('진동 응답 계산이 완료되지 않았습니다: ' + solution.message)
-    checked(solution.y)
     denominator = stiffness - mass * frequencies ** 2 + 1j * damping * frequencies
     amplitudes = np.hypot(an, bn)
-    resonant = (np.abs(denominator) <= 1e-10 * max(stiffness, 1.)) & (amplitudes > 1e-9 * max(1., amplitudes.max()))
-    particular = None
-    if not np.any(resonant):
-        response = np.divide(an - 1j * bn, denominator, out=np.zeros_like(denominator),
-                             where=np.abs(denominator) > 1e-10 * max(stiffness, 1.))
-        particular = checked(a0 / stiffness + np.real(response @ np.exp(1j * frequencies[:, None] * time)))
-    return solution.y, particular, resonant, frequencies
+    active = amplitudes > 1e-9 * max(1., amplitudes.max())
+    resonant = (np.abs(denominator) <= 1e-10 * max(stiffness, 1.)) & active
+    regular = active & ~resonant
+    response = np.zeros_like(denominator)
+    response[regular] = (an[regular] - 1j * bn[regular]) / denominator[regular]
+    phase = np.exp(1j * np.outer(frequencies, time))
+    periodic = a0 / stiffness + np.real(response @ phase)
+    periodic_rate = np.real((1j * frequencies * response) @ phase)
+    position, velocity = periodic.copy(), periodic_rate.copy()
+    for index in np.flatnonzero(resonant):
+        omega, a, b = frequencies[index], an[index], bn[index]
+        sine, cosine = np.sin(omega * time), np.cos(omega * time)
+        position += time / (2 * mass * omega) * (a * sine - b * cosine)
+        velocity += (a * sine - b * cosine) / (2 * mass * omega) + time / (2 * mass) * (a * cosine + b * sine)
+    free_position, free_velocity = homogeneous_motion(time, mass, damping, stiffness,
+                                                      y0 - position[0], v0 - velocity[0])
+    state = checked(np.vstack((position + free_position, velocity + free_velocity)))
+    particular = None if np.any(resonant) else checked(periodic)
+    return state, particular, resonant, frequencies
 
 
 # ── 연속 변환: 블록 처리로 큰 외적의 메모리 사용을 제한합니다 ───────

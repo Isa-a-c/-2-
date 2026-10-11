@@ -200,7 +200,6 @@ class ContinuousTransformTopic(IntegralTopic):
     )
     examples = {'Gaussian 자기 변환': {}, '이동 Gaussian': {'function': 'exp(-(x-2)^2/2)'},
                 '양측 지수': {'function': 'exp(-abs(x))'},
-                '합성곱 정리: 두 Gaussian': {'mode': MODES[1]},
                 '합성곱 정리: 사각 펄스 두 개': {'mode': MODES[1], 'function': 'Heaviside(x+1,1/2)-Heaviside(x-1,1/2)',
                                         'second': 'Heaviside(x+1,1/2)-Heaviside(x-1,1/2)', 'num_points': 8001}}
 
@@ -318,7 +317,7 @@ class DiscreteFourierTopic:
               InputSpec('function', '주기 2π 함수 f(x)', 'text', 'x^2', visible_in=(MODES[1],)),
               InputSpec('parameters', '매개변수 (A=2; w=3)', 'text', '', visible_in=(MODES[1],)),
               InputSpec('N', '표본 수 N', 'int', 8, 2, 64, visible_in=(MODES[1],)))
-    examples = {'교재 예제 데이터 [0,1,4,9]': {}, '사각파 8표본': {'data': '1,1,1,1,-1,-1,-1,-1'},
+    examples = {'사각파 8표본': {'data': '1,1,1,1,-1,-1,-1,-1'},
                 '함수 표본 cos 3x (N=16)': {'mode': MODES[1], 'function': 'cos(3*x)', 'N': 16},
                 'Aliasing: cos 7x를 N=8로 표본화': {'mode': MODES[1], 'function': 'cos(7*x)', 'N': 8}}
 

@@ -277,3 +277,13 @@ def test_solve_like_ode_examples_have_zero_residual(name):
 def test_solve_like_ode_rejects_non_differential_equation():
     with pytest.raises(ValueError, match='미분방정식'):
         get_topic('pde_basics').compute({'mode': '상미분방정식처럼 풀기', 'a': '0', 'b': '0'})
+
+
+def test_membrane_force_balance_converges_to_acceleration():
+    """교재 12.8 식 (1)~(3): c²(Δu_x/Δx+Δu_y/Δy) → u_tt (중심차분이므로 O(Δ²))."""
+    result = get_topic('rectangle_membrane').compute({'initial': '0.1*(4*x-x^2)*(2*y-y^2)', 'length': 4., 'height': 2.,
+                                                      'speed': 2.23606797749979, 'N': 7})
+    rows = result.tables['모델링: 미소부분의 힘'][1]
+    errors = [row[4] for row in rows]
+    assert errors[-1] < 1e-3*abs(rows[-1][3])
+    assert all(later < earlier/3.5 for earlier, later in zip(errors, errors[1:]))

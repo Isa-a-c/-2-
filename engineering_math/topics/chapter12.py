@@ -113,7 +113,7 @@ class PdeBasicsTopic:
         InputSpec('c', 'c (w의 계수)', 'text', '-1', visible_in=(ODE_MODE,)),
         InputSpec('g', '우변 g(x,y)', 'text', '0', visible_in=(ODE_MODE,)),
     )
-    examples = {'조화함수': {}, 'Poisson 다항식': {'mode': 'Poisson', 'candidate': 'x^2+y^2', 'forcing': '4'},
+    examples = {'Poisson 다항식': {'mode': 'Poisson', 'candidate': 'x^2+y^2', 'forcing': '4'},
                 '열방정식 해': {'mode': '열', 'candidate': 'exp(-0.1*pi^2*t)*sin(pi*x)'},
                 '진행파': {'mode': '파동', 'candidate': 'sin(x-t)'}, '해가 아닌 함수': {'candidate': 'x^2+y^2'},
                 '연습문제 17: u_xx + 16π²u = 0': {'mode': ODE_MODE, 'c': '16*pi^2'},
@@ -250,8 +250,7 @@ class PdeClassificationTopic:
               InputSpec('B', '계수 B(x,y) (방정식에서는 2B u_xy)', 'text', '0'),
               InputSpec('C', '계수 C(x,y)', 'text', '-1'), PARAMETERS,
               InputSpec('extent', '분류 지도 범위 [−X,X]²', 'float', 2., .1, 100))
-    examples = {'파동방정식 (y=ct): u_xx − u_yy': {},
-                '열방정식 (y=c²t): u_xx = u_y': {'C': '0'},
+    examples = {'열방정식 (y=c²t): u_xx = u_y': {'C': '0'},
                 'Laplace 방정식': {'C': '1'},
                 'Tricomi 방정식 y u_xx + u_yy (혼합형)': {'A': 'y', 'C': '1'},
                 '연습문제 13: u_xx + 5u_xy + 4u_yy': {'B': '5/2', 'C': '4'},
@@ -499,6 +498,35 @@ def nodal_figure(x, y, values, polar=False):
     return figure
 
 
+def membrane_balance(a, v, omega, length, height, speed, moment):
+    """교재 12.8 식 (1)~(3): 미소부분 ΔxΔy의 수직 합력 TΔy[u_x(x+Δx)−u_x(x)] + TΔx[u_y(y+Δy)−u_y(y)]를
+    질량 ρΔxΔy로 나누면 c²[Δu_x/Δx + Δu_y/Δy]이고 Δ→0에서 u_tt입니다. (x₀, y₀)는 |u_tt|가 가장 큰 내부 점입니다.
+    """
+    count = a.shape[0]
+    kx = np.arange(1, count + 1) * np.pi / length
+    ky = np.arange(1, count + 1) * np.pi / height
+    amplitude = a * np.cos(omega * moment) + np.divide(v, omega) * np.sin(omega * moment)
+
+    def field(x, y, dx=0, dy=0):
+        # dx, dy번 미분한 모드 합입니다(0 또는 1).
+        bx = np.cos(np.outer(np.atleast_1d(x), kx)) * kx if dx else np.sin(np.outer(np.atleast_1d(x), kx))
+        by = np.cos(np.outer(np.atleast_1d(y), ky)) * ky if dy else np.sin(np.outer(np.atleast_1d(y), ky))
+        return np.einsum('im,mn,jn->ij', bx, amplitude, by)
+
+    gx = np.linspace(.1 * length, .9 * length, 81)
+    gy = np.linspace(.1 * height, .9 * height, 81)
+    acceleration = -np.einsum('im,mn,jn->ij', np.sin(np.outer(gx, kx)), amplitude * omega ** 2, np.sin(np.outer(gy, ky)))
+    i, j = np.unravel_index(np.argmax(np.abs(acceleration)), acceleration.shape)
+    x0, y0, target = float(gx[i]), float(gy[j]), float(acceleration[i, j])
+    rows = []
+    for divisor in (8, 16, 32, 64, 128, 256):
+        hx, hy = length / divisor, height / divisor
+        quotient = speed ** 2 * ((field(x0 + hx / 2, y0, dx=1) - field(x0 - hx / 2, y0, dx=1))[0, 0] / hx
+                                 + (field(x0, y0 + hy / 2, dy=1) - field(x0, y0 - hy / 2, dy=1))[0, 0] / hy)
+        rows.append([hx, hy, float(quotient), target, abs(float(quotient) - target)])
+    return dict(rows=rows, x0=x0, y0=y0, moment=moment, field=field)
+
+
 class MembraneTopic:
     id = 'rectangle_membrane'
     title = '12.8–12.9 · 직사각형 막과 이중 급수'
@@ -531,6 +559,10 @@ class MembraneTopic:
                np.max(np.abs(velocity[[0,-1], :])), np.max(np.abs(velocity[:, [0,-1]]))) > 1e-8:
             result.notices.append('초기 변위·속도의 가장자리가 고정단 조건과 다릅니다. 급수 해의 가장자리는 0입니다.')
         result.data['omega'] = omega
+        model = membrane_balance(a, v, omega, p['length'], p['height'], p['speed'], time[len(time) // 3])
+        result.tables['모델링: 미소부분의 힘'] = (['Δx', 'Δy', 'c²(Δu_x/Δx + Δu_y/Δy)', 'u_tt (점 x₀, y₀)', '차이'], model['rows'])
+        result.data['modeling'] = {key: model[key] for key in ('x0', 'y0', 'moment')}
+        result.data['modal'] = (a, v)
         groups = degenerate_groups(omega)
         result.tables['중복 고유값'] = (['omega', 'c·π·√(m²/ell²+n²/height²)의 같은 값을 갖는 (m, n)'],
                                        [[value, ', '.join(f'({m},{n})' for m, n in pairs)] for value, pairs in groups])
@@ -570,7 +602,50 @@ class MembraneTopic:
         figures['에너지'] = figure
         figures['초기 변위의 절선'] = nodal_figure(d['x'], d['y'], d['frames'][0], d['polar'])
         figures['정규진동과 절선'] = self.mode_gallery(result)
+        if 'modeling' in d:
+            figures['모델링: 막의 힘'] = self.force_diagram(result)
         return figures
+
+    @staticmethod
+    def force_diagram(result):
+        """교재 그림 301: 미소부분 ΔxΔy의 네 변에 장력 TΔy, TΔx가 접선 방향으로 작용합니다."""
+        d, p = result.data, result.params
+        model = membrane_balance(*d['modal'], d['omega'], p['length'], p['height'], p['speed'], d['modeling']['moment'])
+        x0, y0 = model['x0'], model['y0']
+        hx, hy = p['length'] / 8, p['height'] / 8
+        x = np.linspace(0, p['length'], 121)
+        y = np.linspace(0, p['height'], 121)
+        surface = model['field'](x, y)
+        figure = Figure(figsize=(10, 4.5), layout='constrained')
+        left, right = figure.subplots(1, 2)
+        limit = max(float(np.max(np.abs(surface))), 1e-12)
+        left.pcolormesh(x, y, surface.T, shading='auto', cmap='coolwarm', vmin=-limit, vmax=limit)
+        corners = np.array([[x0 - hx/2, y0 - hy/2], [x0 + hx/2, y0 - hy/2], [x0 + hx/2, y0 + hy/2], [x0 - hx/2, y0 + hy/2], [x0 - hx/2, y0 - hy/2]])
+        left.plot(corners[:, 0], corners[:, 1], 'k', lw=2)
+        for (px, py, ux, uy, label) in ((x0 - hx/2, y0, -1, 0, 'TΔy'), (x0 + hx/2, y0, 1, 0, 'TΔy'),
+                                        (x0, y0 - hy/2, 0, -1, 'TΔx'), (x0, y0 + hy/2, 0, 1, 'TΔx')):
+            left.annotate('', xy=(px + ux*hx*.9, py + uy*hy*.9), xytext=(px, py), arrowprops=dict(arrowstyle='->', lw=1.8))
+            left.text(px + ux*hx, py + uy*hy, label, ha='center', va='center', fontsize=8)
+        left.set(title=f"u(x,y,t={model['moment']:.3g}) and element ΔxΔy (top view)", xlabel='x', ylabel='y', aspect='equal')
+        section = model['field'](x, np.array([y0]))[:, 0]
+        right.plot(x, section, color='0.5')
+        segment = (x >= x0 - hx/2) & (x <= x0 + hx/2)
+        right.plot(x[segment], section[segment], 'k', lw=2.5)
+        ends = [section.min(), section.max()]
+        for point, sign, color in ((x0 - hx/2, -1, 'tab:blue'), (x0 + hx/2, 1, 'tab:red')):
+            height_value = model['field'](np.array([point]), np.array([y0]))[0, 0]
+            slope = model['field'](np.array([point]), np.array([y0]), dx=1)[0, 0]
+            direction = sign*np.array([1., slope])/np.hypot(1., slope)*.2*p['length']
+            tip = height_value + direction[1]
+            ends += [tip]
+            # 화살표 끝이 곡선 범위 밖이어도 그려지도록 축 범위에 포함합니다.
+            right.annotate('', xy=(point + direction[0], tip), xytext=(point, height_value), annotation_clip=False,
+                           arrowprops=dict(arrowstyle='->', color=color, lw=2))
+        margin = .08*max(max(ends) - min(ends), 1e-12)
+        right.set_ylim(min(ends) - margin, max(ends) + margin)
+        right.set(title=f'Section y = {y0:.3g}: tension TΔy at both ends (tangent)', xlabel='x', ylabel='u')
+        right.grid(alpha=.3)
+        return figure
 
     def mode_gallery(self, result):
         """교재 그림 303과 같이 낮은 정규진동 6개의 부호와 절선(u=0)을 보여 줍니다."""
@@ -612,7 +687,7 @@ class DiskMembraneTopic(MembraneTopic):
               InputSpec('angular_count', '최대 각도 차수 m', 'int', 2, 0, 6),
               InputSpec('num_points', '방사 표본 수', 'int', 101, 41, 201),
               InputSpec('angular_points', '각도 표본 수', 'int', 81, 33, 161)) + TIME_INPUTS
-    examples = {'축대칭 포물선': {}, '비축대칭 막': {'initial': '(r/ell)*(1-r/ell)*cos(theta)'},
+    examples = {'비축대칭 막': {'initial': '(r/ell)*(1-r/ell)*cos(theta)'},
                 '기본 Bessel 모드': {'initial': 'besselj(0,2.404825557695773*r/ell)', 'radial_count': 1, 'angular_count': 0}}
 
     def compute(self, params):
@@ -791,7 +866,7 @@ class PdeLaplaceTopic(EvolutionTopic):
               InputSpec('amplitude', '계단 경계 온도 A', 'float', 1., -100, 100, visible_in=('반무한 열전도',)),
               InputSpec('extent', '표시 길이 X', 'float', 8., .1, 100),
               InputSpec('num_points', '공간 표본 수', 'int', 501, 101, 2001)) + TIME_INPUTS
-    examples = {'한 주기 경계 사인파': {}, '계단 진행파': {'boundary': '1'},
+    examples = {'계단 진행파': {'boundary': '1'},
                 '열 침투': {'mode': '반무한 열전도'}}
 
     def compute(self, params):

@@ -303,3 +303,38 @@ def test_derivative_rule_skipped_for_jump():
     result = get_topic('sine_cosine_transform').compute({'function': 'Heaviside(1-x,1/2)'})
     assert '정리 1 (4a)·(4b) 최대 차이' not in result.metrics
     assert any('도약' in notice for notice in result.notices)
+
+
+@pytest.mark.parametrize('mass,damping,stiffness', [
+    (1., .2, 4.),      # 부족감쇠
+    (1., 4., 4.),      # 임계감쇠 c²=4mk
+    (1., 6., 4.),      # 과감쇠
+    (1., 0., 4.),      # 무감쇠, 외력 성분 n=2가 공진 (ω=2)
+    (1., 0., 2.),      # 무감쇠 비공진
+    (.5, 40., 1.),     # 강한 과감쇠: 큰 t에서 지수 넘침이 없어야 합니다
+])
+def test_forced_response_closed_form_matches_numeric_ode(mass, damping, stiffness):
+    from scipy.integrate import solve_ivp
+    from engineering_math.core.chapter11 import forced_response
+    a0, an, bn = .3, np.array([1., .5, -.2]), np.array([-.4, .8, .1])
+    length, y0, v0 = np.pi, .7, -1.2
+    time = np.linspace(0, 30, 601)
+    state, particular, resonant, frequencies = forced_response(time, length, a0, an, bn, mass, damping, stiffness, y0, v0)
+
+    def rhs(t, s):
+        force = a0 + an @ np.cos(frequencies*t) + bn @ np.sin(frequencies*t)
+        return [s[1], (force - damping*s[1] - stiffness*s[0])/mass]
+
+    reference = solve_ivp(rhs, (0, 30), [y0, v0], t_eval=time, method='DOP853', rtol=1e-11, atol=1e-12, max_step=.01)
+    np.testing.assert_allclose(state, reference.y, atol=2e-7)
+    assert resonant.any() == (damping == 0 and stiffness == 4.)
+    assert (particular is None) == resonant.any()
+
+
+def test_forced_response_long_time_is_instant():
+    """최대 설정(N=60, 100초)도 수치 적분 없이 즉시 계산됩니다."""
+    import time as clock
+    start = clock.perf_counter()
+    result = get_topic('fourier_forced').compute({'function': 'sign(sin(x))', 'N': 60, 'num_points': 20001, 'end_time': 100.})
+    assert clock.perf_counter() - start < .5
+    assert np.all(np.isfinite(result.data['state']))

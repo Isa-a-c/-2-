@@ -157,10 +157,19 @@ def test_11_7_2_single_pulse_integral():
     np.testing.assert_allclose(d['spectrum'].imag, 0, atol=1e-10)
 
 
-def test_11_7_3_laplace_integral():
-    d = run('11.7-3').data
-    w = d['omega']
-    np.testing.assert_allclose(d['spectrum'], np.sqrt(2/PI)/(1+w**2), atol=5e-6)
+def test_11_7_3_laplace_integrals():
+    """교재 48쪽 식 (12)·(14): A(w)=(2k/π)/(k²+w²), B(w)=(2w/π)/(k²+w²), k=1."""
+    cosine = run('11.7-3', '코사인 적분').data
+    w = cosine['omega']
+    # x=0의 꺾임 때문에 사다리꼴 적분은 상수 오차 (h²/12)(2k)/π ≈ 5e-6을 남깁니다.
+    np.testing.assert_allclose(cosine['spectrum_curves']['A(omega)'], 2/PI/(1+w**2), atol=1e-5)
+    np.testing.assert_allclose(cosine['spectrum_curves']['B(omega)'], 0, atol=1e-12)
+    sine = run('11.7-3', ': 사인 적분').data
+    # 기확장의 x=0 도약(J=2)은 사다리꼴 적분에 w·h²/(6π) 오차를 남깁니다(h=80/8192).
+    h = 80/8192
+    error = np.abs(sine['spectrum_curves']['B(omega)'] - 2*w/PI/(1+w**2))
+    assert np.all(error <= 1.01*w*h**2/(6*PI) + 1e-9)
+    np.testing.assert_allclose(sine['spectrum_curves']['A(omega)'], 0, atol=1e-12)
 
 
 def test_11_8_1_rectangle_transforms():
@@ -205,7 +214,7 @@ def test_11_9_4_dft_of_four_samples():
 
 
 def test_11_9_5_fft_even_odd_split():
-    rows = run('11.9-5').tables['FFT 분해 단계'][1]
+    rows = run('11.9-4').tables['FFT 분해 단계'][1]
     top = rows[-1]
     assert top[0] == 4 and top[3] == '[4, -4]' and top[4] == '[10, -8]'
     assert top[5] == '[14, -4+8i, -6, -4-8i]'

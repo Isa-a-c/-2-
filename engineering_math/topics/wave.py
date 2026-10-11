@@ -156,16 +156,21 @@ class WaveTopic:
         segment = (x >= left) & (x <= right)
         axis.plot(x[segment], shape[segment], color='k', lw=2.5, label='element [x, x+Δx]')
         scale = .25*length
+        ends = [shape.min(), shape.max()]
         for point, sign, name, color in ((left, -1, 'T₁ (at P)', 'tab:blue'), (right, 1, 'T₂ (at Q)', 'tab:red')):
             # 장력의 크기는 같고 방향만 접선을 따릅니다. 화살표는 데이터 좌표의 접선 방향입니다.
             direction = np.array([1., slope(point)])
             dx, dy = scale*sign*direction/np.hypot(*direction)
-            axis.annotate('', xy=(point + dx, height(point) + dy), xytext=(point, height(point)),
+            ends.append(height(point) + dy)
+            axis.annotate('', xy=(point + dx, height(point) + dy), xytext=(point, height(point)), annotation_clip=False,
                           arrowprops=dict(arrowstyle='->', color=color, lw=2))
             axis.plot([point + dx, point + dx], [height(point), height(point) + dy], ':', color=color)
             axis.text(point + dx, height(point) + dy, ' ' + name, color=color, fontsize=9)
         axis.set(xlabel='x', ylabel='u(x, t)',
                  title=f"String at t={model['moment']:.3g}: tension along the tangent; vertical parts T sinβ − T sinα ≈ ρΔx u_tt")
+        # 화살표 끝이 현의 범위 밖이어도 보이도록 세로 범위를 넓힙니다.
+        margin = .08*max(max(ends) - min(ends), 1e-12)
+        axis.set_ylim(min(ends) - margin, max(ends) + margin)
         axis.legend(loc='lower right', fontsize=8)
         axis.grid(alpha=.3)
         return figure

@@ -33,3 +33,9 @@ AFTER: 실험군 → 문제 → 지원 구성으로 선택하고 교재 바로�
 - 주제가 `migrate(params)`를 제공하면 설정 불러오기에서 이전 값의 이름을 바꿉니다(예: 11.10 공식 이름). 의미가 사라진 설정 항목은 `core/project.py`의 `RETIRED_KEYS`에서 제거합니다.
 - 주제 24개, 지원 구성 27개입니다. 같은 주제의 다른 구성(열전도 고정/단열, 무한/반무한 막대)은 `mode`를 잠근 카탈로그 항목으로 연결합니다.
 - 테스트는 주제 목록의 위치가 아니라 교재 절 번호(`lesson`)로 주제를 고릅니다.
+
+
+## v1.7.1 변경
+
+- 사다리꼴 가중치 `trapezoid_weights`, 차수 블록 행렬 곱 `harmonic_projections`, 반구간 계수 `half_range_coefficients`를 `core/fourier.py` 한곳에 둡니다. `integrate_harmonics`(11.1 캐시), `core.chapter11.half_range`(11.2), `core.pde.sine_coefficients·cosine_coefficients`(12장)가 모두 이를 사용합니다. `core.chapter11.trapezoid_weights`는 같은 함수를 다시 내보냅니다.
+- `core.chapter11.forced_response`는 수치 적분 없이 닫힌 해를 계산합니다(`homogeneous_motion` + 성분별 특수해, 무감쇠 공진은 t·sin 항).

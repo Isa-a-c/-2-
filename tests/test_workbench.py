@@ -113,3 +113,14 @@ def test_animation_contract(topic_id):
         return
     spec = topic.animation(topic.compute({}))
     assert len(spec['frames']) == len(spec['labels']) > 0
+
+
+@pytest.mark.parametrize('topic_id', list(dict.fromkeys(item.topic for item in EXPERIMENTS)))
+def test_examples_are_not_duplicated(topic_id):
+    """한 주제 안에서 기본값까지 채운 입력이 같은 예제가 두 개 있으면 안 됩니다."""
+    topic = get_topic(topic_id)
+    seen = {}
+    for name, params in topic.examples.items():
+        key = tuple(sorted(validate_params(topic.inputs, params).items()))
+        assert key not in seen, f'{name} 와 {seen.get(key)} 의 입력이 같습니다.'
+        seen[key] = name

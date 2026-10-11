@@ -24,35 +24,70 @@ def calculate_fourier_coefficients(x, y, L, max_N):
     if not np.isclose(x[0], -L) or not np.isclose(x[-1], L):
         raise ValueError("표본 구간은 [-L, L]이어야 합니다.")
 
-    # NumPy 2.x의 API를 우선 사용하고 이전 버전도 지원한다.
-    integrate = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
     with np.errstate(over="raise", invalid="raise", divide="raise"):
-        a0 = float(integrate(y, x=x) / (2 * L))
+        a0 = float(trapezoid_weights(x) @ y / (2 * L))
         cosine_coefficients, sine_coefficients = integrate_harmonics(x,y,L,1,max_N)
     if not np.all(np.isfinite(np.r_[a0, cosine_coefficients, sine_coefficients])):
         raise ValueError("계수가 유한하지 않습니다. 함수의 크기를 줄여 주세요.")
     return a0, cosine_coefficients, sine_coefficients
 
+def trapezoid_weights(x):
+    """증가하는 격자의 사다리꼴 가중치 w입니다. ∫f dx ≈ w·f (불균일 격자 허용)."""
+    x = np.asarray(x, dtype=float)
+    if not np.all(np.isfinite(x)):
+        raise ValueError('계산 결과가 유한하지 않습니다. 입력 크기와 구간을 확인하십시오.')
+    if x.ndim != 1 or len(x) < 2 or np.any(np.diff(x) <= 0):
+        raise ValueError('적분 격자는 증가하는 1차원 배열이어야 합니다.')
+    weights = np.empty_like(x)
+    weights[0] = (x[1] - x[0]) / 2
+    weights[-1] = (x[-1] - x[-2]) / 2
+    weights[1:-1] = (x[2:] - x[:-2]) / 2
+    return weights
+
+
+def harmonic_projections(x, weighted, scale, orders, waves=('cos', 'sin'), block=4_000_000):
+    """scale·Σ w·f·cos/sin(nπx/scale…)의 공통 계산입니다. 큰 행렬은 차수 블록으로 나눕니다.
+
+    weighted는 w·f, orders는 정수 차수 배열, 각도는 n·π·x/scale입니다.
+    """
+    orders = np.asarray(orders)
+    base = np.pi * np.asarray(x, dtype=float) / scale
+    results = {wave: np.empty(len(orders)) for wave in waves}
+    step = max(1, block // max(len(base), 1))
+    with np.errstate(over='raise', invalid='raise', divide='raise'):
+        for start in range(0, len(orders), step):
+            angle = np.outer(orders[start:start+step], base)
+            for wave in waves:
+                function = np.cos if wave == 'cos' else np.sin
+                results[wave][start:start+step] = function(angle) @ weighted
+    return results
+
+
 def integrate_harmonics(x, y, L, first, last):
-    """검증된 표본에서 필요한 차수 범위만 적분하는 내부 함수."""
-    integrate = np.trapezoid if hasattr(np,'trapezoid') else np.trapz
-    an = np.empty(last-first+1)
-    bn = np.empty_like(an)
-    base_angle = np.pi*(x/L)
-    angle = np.empty_like(x)
-    wave = np.empty_like(x)
-    with np.errstate(over='raise',invalid='raise',divide='raise'):
-        for index,n in enumerate(range(first,last+1)):
-            np.multiply(base_angle,n,out=angle)
-            np.cos(angle,out=wave)
-            np.multiply(y,wave,out=wave)
-            an[index] = integrate(wave,x=x)/L
-            np.sin(angle,out=wave)
-            np.multiply(y,wave,out=wave)
-            bn[index] = integrate(wave,x=x)/L
+    """검증된 [-L,L] 표본에서 aₙ, bₙ (n=first…last)만 적분하는 내부 함수 (캐시 증분 계산용)."""
+    weighted = trapezoid_weights(x) * np.asarray(y, dtype=float)
+    results = harmonic_projections(x, weighted, L, np.arange(first, last+1))
+    an, bn = results['cos'] / L, results['sin'] / L
     if not np.all(np.isfinite(an)) or not np.all(np.isfinite(bn)):
         raise ValueError('계수가 유한하지 않습니다. 함수의 크기를 줄이십시오.')
-    return an,bn
+    return an, bn
+
+
+def half_range_coefficients(x, values, length, count, cosine):
+    """[0, L] 표본의 반구간 전개 계수입니다(11.2절 식 6*·6**).
+
+    사인: bₙ=(2/L)∫f sin(nπx/L)dx, 코사인: A₀=(1/L)∫f dx, Aₙ=(2/L)∫f cos(nπx/L)dx.
+    기확장·우확장한 [−L, L]의 Euler 공식과 같은 값을 배열을 늘리지 않고 계산합니다.
+    반환: (A₀ 또는 0, 계수 배열).
+    """
+    weighted = trapezoid_weights(x) * np.asarray(values, dtype=float)
+    wave = 'cos' if cosine else 'sin'
+    coefficients = 2 / length * harmonic_projections(x, weighted, length, np.arange(1, count+1), (wave,))[wave]
+    constant = float(weighted.sum() / length) if cosine else 0.
+    if not np.all(np.isfinite(coefficients)) or not np.isfinite(constant):
+        raise ValueError('계수가 유한하지 않습니다. 함수의 크기를 줄이십시오.')
+    return constant, coefficients
+
 
 def calculate_fourier_sum(x, L, a0, an, bn, N):
     """a0 + Σ(an cos(nπx/L) + bn sin(nπx/L))를 계산한다."""
