@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QTreeWidget, QTre
 from engineering_math.topics.catalog import EXPERIMENTS, experiment_index
 from engineering_math.topics.textbook import EXAMPLES as TEXTBOOK
 
-CHAPTERS = (('11.', '11장 Fourier 해석'), ('12.', '12장 편미분방정식'), ('', '상권 복습 · ODE와 Laplace 변환'))
+CHAPTERS = (('11.', '11장 Fourier 해석'), ('12.', '12장 편미분방정식'))
 ROLE = Qt.ItemDataRole.UserRole
 
 

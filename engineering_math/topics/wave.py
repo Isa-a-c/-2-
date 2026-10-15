@@ -38,7 +38,7 @@ class WaveTopic:
         InputSpec('initial', '초기 변위 u(x,0)', 'text', 'sin(pi*x/ell)'),
         InputSpec('velocity', '초기 속도 u_t(x,0)', 'text', '0'),
         InputSpec('parameters', '매개변수 (A=2; w=3)', 'text', ''),
-        InputSpec('length', '현의 길이 ell', 'float', 1., .001, 1000),
+        InputSpec('length', '현의 길이 ℓ (수식: ell)', 'float', 1., .001, 1000, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
         InputSpec('speed', '파동 속력 c', 'float', 1., .000001, 1000),
         InputSpec('N', '사인 급수 차수 N', 'int', 20, 1, 100),
         InputSpec('num_points', '공간 표본 수', 'int', 501, 201, 5001),

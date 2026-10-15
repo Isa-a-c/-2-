@@ -32,7 +32,6 @@ def test_keys_are_unique_per_label_and_unsupported_is_disjoint():
     labels = [item.label for item in EXAMPLES]
     assert len(labels) == len(set(labels))
     assert not set(UNSUPPORTED) & {item.key for item in EXAMPLES}
-    assert examples_for('ode') == {}
 
 
 # ── 11장 ────────────────────────────────────────────────────────

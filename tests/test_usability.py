@@ -36,7 +36,8 @@ def test_tree_groups_entries_by_chapter(window):
     assert chapters[0].startswith('11장') and chapters[1].startswith('12장')
     for index, entry in enumerate(EXPERIMENTS):
         parent = window.selector.entries[index].parent().text(0)
-        assert parent.startswith(entry.lesson[:2]) or not entry.lesson[:2].isdigit()
+        assert parent.startswith(entry.lesson[:2])
+    assert len(chapters) == 2
 
 
 def test_examples_match_locked_configuration(window):

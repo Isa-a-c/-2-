@@ -533,8 +533,8 @@ class MembraneTopic:
     description = '가장자리가 고정된 균질 막의 u_tt=c²(u_xx+u_yy)를 이중 사인 급수로 계산합니다.'
     inputs = (InputSpec('initial', '초기 변위 f(x,y)', 'text', 'sin(pi*x/ell)*sin(pi*y/height)'),
               InputSpec('velocity', '초기 속도 g(x,y)', 'text', '0'), PARAMETERS,
-              InputSpec('length', '가로 ell', 'float', 1., .05, 20),
-              InputSpec('height', '세로 height', 'float', 1., .05, 20),
+              InputSpec('length', '가로 길이 ℓ (수식: ell)', 'float', 1., .05, 20, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
+              InputSpec('height', '세로 길이 (수식: height)', 'float', 1., .05, 20, help='수식에 height라고 쓰면 이 값이 들어갑니다. 예: sin(pi*y/height)'),
               InputSpec('speed', '파동 속력 c', 'float', 1., .01, 20),
               InputSpec('N', '방향별 모드 수 N', 'int', 6, 1, 16),
               InputSpec('num_points', '방향별 공간 표본 수', 'int', 81, 41, 161)) + TIME_INPUTS
@@ -681,7 +681,7 @@ class DiskMembraneTopic(MembraneTopic):
     description = '고정 원주를 갖는 원형 막입니다. r·theta·ell을 입력에 사용하며 ell은 반지름입니다.'
     inputs = (InputSpec('initial', '초기 변위 f(r,theta)', 'text', '1-(r/ell)^2'),
               InputSpec('velocity', '초기 속도 g(r,theta)', 'text', '0'), PARAMETERS,
-              InputSpec('radius', '반지름 ell', 'float', 1., .05, 20),
+              InputSpec('radius', '반지름 ℓ (수식: ell)', 'float', 1., .05, 20, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*r/ell)'),
               InputSpec('speed', '파동 속력 c', 'float', 1., .01, 20),
               InputSpec('radial_count', '방사 모드 수', 'int', 6, 1, 16),
               InputSpec('angular_count', '최대 각도 차수 m', 'int', 2, 0, 6),
@@ -747,8 +747,8 @@ class RectangleLaplaceTopic:
               InputSpec('bottom', '아랫변 u(x, 0)', 'text', '0'),
               InputSpec('left', '왼쪽 변 u(0, y)', 'text', '0'),
               InputSpec('right', '오른쪽 변 u(ell, y)', 'text', '0'), PARAMETERS,
-              InputSpec('length', '가로 ell', 'float', 1., .01, 1000),
-              InputSpec('height', '세로 height', 'float', 1., .01, 1000),
+              InputSpec('length', '가로 길이 ℓ (수식: ell)', 'float', 1., .01, 1000, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
+              InputSpec('height', '세로 길이 (수식: height)', 'float', 1., .01, 1000, help='수식에 height라고 쓰면 이 값이 들어갑니다. 예: sin(pi*y/height)'),
               InputSpec('N', '변마다 급수 차수 N', 'int', 30, 1, 200),
               InputSpec('num_points', '방향별 표시 표본 수', 'int', 101, 41, 301),
               InputSpec('quadrature_points', '경계 구적 노드 수', 'int', 1024, 128, 8192))

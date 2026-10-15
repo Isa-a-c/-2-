@@ -5,7 +5,6 @@ import tempfile
 from pathlib import Path
 from engineering_math.topics.fourier import MODES
 from engineering_math.core.project import save_settings, load_settings, export_results
-from engineering_math.ui.animation import AnimationDialog
 from engineering_math.topics.catalog import EXPERIMENTS
 
 
@@ -18,6 +17,28 @@ def wait_for_job(application, window):
         time.sleep(.01)
     assert not window.job.busy, '계산 완료 대기 시간이 초과되었습니다.'
     return pulses
+
+
+def open_tab(application, window, name):
+    names = [window.tabs.tabText(i) for i in range(window.tabs.count())]
+    window.tabs.setCurrentIndex(names.index(name))
+    application.processEvents()
+    return window.tabs.currentWidget()
+
+
+def play_to_end(application, player):
+    """재생 단추로 몇 프레임 진행한 뒤 마지막 프레임(원래 그래프)으로 이동합니다."""
+    assert player.animator.animated
+    player.go(0)
+    player.toggle()
+    deadline = time.monotonic()+5
+    while player.slider.value() < 2 and time.monotonic() < deadline:
+        application.processEvents()
+        time.sleep(.01)
+    player.pause()
+    assert player.slider.value() >= 2
+    player.go(player.slider.maximum())
+    application.processEvents()
 
 
 def run(application, window, report_path):
@@ -74,10 +95,9 @@ def run(application, window, report_path):
             assert window.result is result and not errors, errors
             application.processEvents()
         checks.append('푸리에 기본 및 추가 분석 6종 그래프 표시')
-        dialog = AnimationDialog(window.topic.animation(window.result), window)
-        dialog.slider.setValue(dialog.slider.maximum())
-        dialog.close()
-        checks.append('푸리에 부분합 애니메이션')
+        play_to_end(application, open_tab(application, window, '변화 과정').player)
+        play_to_end(application, open_tab(application, window, window.tabs.tabText(0)).player)
+        checks.append('푸리에 부분합 변화 과정 탭과 그래프 아래 재생 막대')
         window.calculate()
         window.cancel()
         assert window.job.process is None
@@ -85,24 +105,21 @@ def run(application, window, report_path):
         window.selector.setCurrentIndex(window.selector.findData('heat'))
         result = window.topic.compute({})
         window.present(result)
-        assert window.tabs.count() == 7 and not errors, errors
+        assert window.tabs.count() == 8 and not errors, errors
         checks.append('열방정식 곡선·히트맵·수치 표 표시')
         application.processEvents()
         screenshot = Path(report_path).with_suffix('.png')
         window.grab().save(str(screenshot))
-        dialog = AnimationDialog(window.topic.animation(result), window)
-        dialog.show()
-        dialog.slider.setValue(dialog.slider.maximum())
-        application.processEvents()
-        dialog.close()
-        checks.append('열방정식 애니메이션 마지막 프레임')
+        play_to_end(application, open_tab(application, window, '시간별 온도').player)
+        play_to_end(application, open_tab(application, window, '변화 과정').player)
+        checks.append('열방정식 시간별 곡선 순차 재생과 변화 과정 마지막 프레임')
         window.calculate()
         window.selector.setCurrentIndex(window.selector.findData('wave'))
         assert not window.job.busy and window.result is None
         window.calculate()
         wait_for_job(application, window)
         result = window.result
-        assert result.topic == 'wave' and window.tabs.count() == 10 and not errors, errors
+        assert result.topic == 'wave' and window.tabs.count() == 11 and not errors, errors
         checks.append('계산 중 주제 변경 및 파동 비동기 계산·열 비교 그래프')
         window.resize(1000, 700)
         application.processEvents()
@@ -110,10 +127,8 @@ def run(application, window, report_path):
         window.help()
         assert window.tabs.tabText(window.tabs.currentIndex()) == '학습 설명'
         assert '초기 속도' in window.tabs.currentWidget().toPlainText()
-        dialog = AnimationDialog(window.topic.animation(result), window)
-        dialog.slider.setValue(dialog.slider.maximum())
-        dialog.close()
-        checks.append('파동 애니메이션·학습 설명 및 작은 창 표시')
+        play_to_end(application, open_tab(application, window, '변화 과정').player)
+        checks.append('파동 변화 과정 재생·학습 설명 및 작은 창 표시')
         with tempfile.TemporaryDirectory(prefix='공업수학 검증 ') as folder:
             path = Path(folder)/'설정.json'
             save_settings(path, result.topic, result.params)
@@ -127,45 +142,6 @@ def run(application, window, report_path):
         from engineering_math.core.expr import parse_expression, evaluate
         assert evaluate(parse_expression('besselj(0,x)'), ([0.],))[0] == 1.
         checks.append('SciPy 특수함수 평가')
-        window.selector.setCurrentIndex(window.selector.findData('ode'))
-        window.calculate()
-        wait_for_job(application, window)
-        assert window.result.topic == 'ode' and not errors, errors
-        assert window.laplace_link.isEnabled() and not window.animate.isEnabled()
-        application.processEvents()
-        window.grab().save(str(Path(report_path).with_name('ode-window.png')))
-        window.open_laplace()
-        wait_for_job(application, window)
-        assert window.result.topic == 'laplace' and 'values' in window.result.data and not errors, errors
-        checks.append('ODE 시간 응답·위상평면 및 초기조건 포함 라플라스 역변환 연결')
-        for index in range(window.tabs.count()):
-            if window.tabs.tabText(index) == '기호 계산':
-                window.tabs.setCurrentIndex(index)
-        application.processEvents()
-        window.grab().save(str(Path(report_path).with_name('laplace-window.png')))
-        window.form.set_values({'mode': '역변환 s → t', 'expression': '1'})
-        window.calculate()
-        wait_for_job(application, window)
-        assert 'values' not in window.result.data and not errors, errors
-        checks.append('임펄스 역변환의 기호 표시 및 그래프 생략')
-        window.selector.setCurrentIndex(window.selector.findData('ode'))
-        window.form.set_values({'mode': '직접 입력', 'force_expression': 'A*cos(w*t)',
-                                'parameters': 'A=2; w=3', 'end_time': 2., 'num_points': 201})
-        window.calculate()
-        wait_for_job(application, window)
-        assert not errors and window.result.data['laplace_input'] is None, errors
-        assert not window.laplace_link.isEnabled()
-        assert window.result.params['parameters'] == 'A=2; w=3'
-        application.processEvents()
-        window.grab().save(str(Path(report_path).with_name('custom-force.png')))
-        window.form.fields['symbolic_mode'].setCurrentText('라플라스 변환도 계산')
-        window.calculate()
-        wait_for_job(application, window)
-        assert not errors and window.laplace_link.isEnabled(), errors
-        window.open_laplace()
-        wait_for_job(application, window)
-        assert not errors and 'values' in window.result.data, errors
-        checks.append('매개변수 외력 직접 입력·수치 계산·선택적 라플라스 연결')
         window.selector.setCurrentIndex(window.selector.findData('fourier'))
         window.form.set_values({'function': 'A*sinc(x)', 'parameters': 'A=2'})
         window.calculate()
@@ -182,7 +158,8 @@ def run(application, window, report_path):
             window.calculate()
             wait_for_job(application, window)
             assert window.result is not None and window.result.topic == topic_id and not errors, errors
-            assert window.figures and not window.animate.isEnabled()
+            assert window.figures and '변화 과정' not in [window.tabs.tabText(i) for i in range(window.tabs.count())]
+            assert open_tab(application, window, window.tabs.tabText(0)).player is not None
             window.help()
             assert '11.' in window.tabs.currentWidget().toPlainText()
         window.tabs.setCurrentIndex(0)
@@ -200,13 +177,10 @@ def run(application, window, report_path):
             window.help()
             assert '12.' in window.tabs.currentWidget().toPlainText()
             if topic_id in ('rectangle_membrane', 'disk_membrane'):
-                dialog = AnimationDialog(window.topic.animation(window.result), window)
-                dialog.show()
-                dialog.slider.setValue(dialog.slider.maximum())
-                dialog.canvas.draw()
-                application.processEvents()
-                dialog.grab().save(str(Path(report_path).with_name(topic_id + '-animation.png')))
-                dialog.close()
+                page = open_tab(application, window, '변화 과정')
+                play_to_end(application, page.player)
+                page.player.canvas.draw()
+                window.grab().save(str(Path(report_path).with_name(topic_id + '-animation.png')))
         window.tabs.setCurrentIndex(0)
         application.processEvents()
         window.grab().save(str(Path(report_path).with_name('chapter12-window.png')))

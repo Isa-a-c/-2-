@@ -9,7 +9,7 @@ from PySide6.QtGui import QKeySequence, QShortcut, QGuiApplication
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QScrollArea, QTabWidget, QProgressBar, QMessageBox, QCheckBox,
     QFileDialog, QTableView, QTextBrowser, QApplication)
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
 from engineering_math import VERSION
 from engineering_math.topics import get_topic
 from engineering_math.topics.lessons import lesson_for
@@ -17,7 +17,7 @@ from engineering_math.core.project import save_settings, load_settings, export_r
 from engineering_math.core.models import validate_params
 from .forms import InputForm
 from .jobs import CalculationJob
-from .animation import AnimationDialog
+from .player import FigureAnimator, PlayerBar, ZoomCanvas, evolution_figure, HINT
 from .experiments import ExperimentSelector
 
 # 마지막 계산이 이 시간(초) 안에 끝난 구성만 입력 변경 시 자동으로 다시 계산합니다.
@@ -171,13 +171,6 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 0)
         self.progress.hide()
         layout.addWidget(self.progress)
-        self.animate = QPushButton('변화 과정 재생')
-        self.animate.setEnabled(False)
-        layout.addWidget(self.animate)
-        self.laplace_link = QPushButton('이 ODE 결과를 라플라스 역변환으로 확인')
-        self.laplace_link.setEnabled(False)
-        self.laplace_link.clicked.connect(self.open_laplace)
-        layout.addWidget(self.laplace_link)
         left.addWidget(inputs)
         left.setStretchFactor(0, 2)
         left.setStretchFactor(1, 3)
@@ -206,7 +199,6 @@ class MainWindow(QMainWindow):
         calculate.clicked.connect(self.calculate)
         cancel.clicked.connect(self.cancel)
         reset.clicked.connect(lambda: self.form.set_values({}))
-        self.animate.clicked.connect(self.show_animation)
         for keys in ('Ctrl+Return', 'Ctrl+Enter'):
             QShortcut(QKeySequence(keys), self, self.calculate)
         QShortcut(QKeySequence('Esc'), self, self.cancel)
@@ -231,8 +223,6 @@ class MainWindow(QMainWindow):
         import matplotlib.pyplot as plt
         blocker = QSignalBlocker(self.tabs)
         self.result = None
-        self.animate.setEnabled(False)
-        self.laplace_link.setEnabled(False)
         while self.tabs.count():
             widget = self.tabs.widget(0)
             self.tabs.removeTab(0)
@@ -248,7 +238,6 @@ class MainWindow(QMainWindow):
         self.state_key = self.selector.currentIndex()
         entry = self.selector.experiment
         self.topic = get_topic(entry.topic)
-        self.laplace_link.setVisible(self.topic.id == 'ode')
         self.description.setText(self.topic.description)
         self.build_form(self.states.get(self.state_key, {}))
         self.selector.ensure_examples(self.state_key)
@@ -363,6 +352,11 @@ class MainWindow(QMainWindow):
                 page.pending_figure = figure
                 self.tabs.addTab(page, name)
                 self.figures.append(figure)
+            if getattr(self.topic, 'supports_animation', True):
+                # 시간·차수에 따른 해를 같은 재생 막대로 보는 탭입니다. 프레임은 탭을 열 때 계산합니다.
+                page = QWidget()
+                page.pending_evolution = lambda topic=self.topic, result=result: topic.animation(result)
+                self.tabs.addTab(page, '변화 과정')
             table_tabs = QTabWidget()
             table_tabs.setObjectName('tables')
             for name, (columns, rows) in result.tables.items():
@@ -393,8 +387,6 @@ class MainWindow(QMainWindow):
             self.show_metrics(result)
             self.result = result
             self.update_input_state()
-            self.animate.setEnabled(getattr(self.topic, 'supports_animation', True))
-            self.laplace_link.setEnabled(result.topic == 'ode' and bool(result.data.get('laplace_input')))
             self.render_tab(self.tabs.currentIndex())
             elapsed = None
             if self.started is not None:
@@ -436,14 +428,37 @@ class MainWindow(QMainWindow):
         page = self.tabs.widget(index)
         if isinstance(page, QTabWidget):
             self.fit_table(page.currentWidget())
-        if page is None or not hasattr(page, 'pending_figure'):
+        for player in self.tabs.findChildren(PlayerBar):
+            if page is None or not page.isAncestorOf(player):
+                player.pause()
+        if page is None:
             return
-        figure = page.pending_figure
-        del page.pending_figure
+        custom = None
+        if hasattr(page, 'pending_evolution'):
+            try:
+                figure, custom = evolution_figure(page.pending_evolution())
+            except Exception as exc:
+                del page.pending_evolution
+                self.show_error(str(exc))
+                return
+            del page.pending_evolution
+            self.figures.append(figure)
+        elif hasattr(page, 'pending_figure'):
+            figure = page.pending_figure
+            del page.pending_figure
+        else:
+            return
+        # 그래프 바로 아래에 재생 막대를 둡니다. 확대·이동은 Ctrl/Shift+휠과 도구 모음을 함께 씁니다.
         layout = QVBoxLayout(page)
-        canvas = FigureCanvasQTAgg(figure)
-        layout.addWidget(NavigationToolbar2QT(canvas, page))
-        layout.addWidget(canvas)
+        canvas = ZoomCanvas(figure)
+        toolbar = NavigationToolbar2QT(canvas, page)
+        toolbar.addSeparator()
+        toolbar.addWidget(QLabel(HINT))
+        layout.addWidget(toolbar)
+        layout.addWidget(canvas, 1)
+        player = PlayerBar(FigureAnimator(figure, custom), canvas, page)
+        layout.addWidget(player)
+        page.player = player
         canvas.draw()
 
     def show_error(self, message):
@@ -483,23 +498,6 @@ class MainWindow(QMainWindow):
             self.auto_timer.stop()
         if redraw and self.result is not None:
             self.present(self.result)
-
-    def show_animation(self):
-        if self.result is not None:
-            try:
-                dialog = AnimationDialog(self.topic.animation(self.result), self)
-                dialog.exec()
-            except Exception as exc:
-                self.show_error(str(exc))
-
-    def open_laplace(self):
-        if self.result is None or self.result.topic != 'ode' or not self.result.data.get('laplace_input'):
-            return
-        params = {'mode': '역변환 s → t', 'expression': self.result.data['laplace_input'],
-                  'end_time': self.result.params['end_time'], 'num_points': self.result.params['num_points']}
-        self.selector.setCurrentIndex(self.selector.findData('laplace'))
-        self.form.set_values(params)
-        self.calculate()
 
     def save(self):
         path, _ = QFileDialog.getSaveFileName(self, '설정 저장', '', 'JSON (*.json)')

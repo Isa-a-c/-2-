@@ -52,7 +52,7 @@ class HeatTopic:
         InputSpec('mode', '경계조건', 'choice', FIXED, choices=(FIXED, INSULATED)),
         InputSpec('initial', '초기 온도 u(x,0)', 'text', 'sin(pi*x/ell)', help='x와 막대 길이 ell을 사용하십시오.'),
         InputSpec('parameters', '매개변수 (A=2; w=3)', 'text', ''),
-        InputSpec('length', '막대 길이 ell', 'float', 1., .001, 1000),
+        InputSpec('length', '막대 길이 ℓ (수식: ell)', 'float', 1., .001, 1000, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
         InputSpec('alpha', '열확산계수 α', 'float', .1, .000001, 1000),
         InputSpec('left', '왼쪽 경계 온도', 'float', 0., -100000, 100000, visible_in=(FIXED,)),
         InputSpec('right', '오른쪽 경계 온도', 'float', 0., -100000, 100000, visible_in=(FIXED,)),

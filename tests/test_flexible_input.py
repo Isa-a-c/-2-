@@ -7,8 +7,6 @@ from engineering_math.core.expr import parse_expression, parameter_expression, p
 from engineering_math.topics.fourier import FourierTopic
 from engineering_math.topics.heat import HeatTopic
 from engineering_math.topics.wave import WaveTopic
-from engineering_math.topics.ode import OdeTopic, FORCES
-from engineering_math.topics.laplace import LaplaceTopic
 
 
 @pytest.mark.parametrize('expression, expected', [
@@ -52,67 +50,10 @@ def test_pde_parameters(topic):
     np.testing.assert_allclose(result.data['initial'], 2*np.sin(np.pi*result.data['x']), atol=1e-14)
 
 
-def test_laplace_parameters_and_distribution():
-    result = LaplaceTopic().compute({'expression': 'A*exp(-w*t)', 'parameters': 'A=2; w=3'})
-    s = sp.Symbol('s')
-    assert sp.simplify(result.data['transformed']-2/(s+3)) == 0
-    result = LaplaceTopic().compute({'expression': 'DiracDelta(t)'})
-    assert result.data['transformed'] == 1
-    assert 'values' not in result.data
-
-
-def custom(**params):
-    return OdeTopic().compute({'mode': FORCES[4], 'end_time': 2., 'num_points': 201, **params})
-
-
-def test_manufactured_custom_force():
-    result = custom(force_expression='A*sin(t)+b*cos(t)', parameters='A=3; b=2/5', position=0., velocity=1.)
-    t = result.data['time']
-    np.testing.assert_allclose(result.data['values'][0], np.sin(t), atol=1e-8)
-    np.testing.assert_allclose(result.data['values'][1], np.cos(t), atol=1e-8)
-    assert result.data['laplace_input'] is None
-
-
-def test_narrow_piecewise_pulse_auto_boundaries():
-    result = custom(force_expression='Piecewise((1, And(t>=tau,t<tau+0.001)), (0, True))',
-                    parameters='tau=1/3', damping=0., position=0.)
-    t = result.data['time']
-    def step_response(delay):
-        return np.where(t >= delay, (1-np.cos(2*(t-delay)))/4, 0.)
-    exact = step_response(1/3)-step_response(1/3+.001)
-    np.testing.assert_allclose(result.data['values'][0], exact, atol=1e-9)
-    assert len(result.data['boundaries']) == 4
-
-
-def test_manual_breakpoints_and_symbolic_success():
-    result = custom(force_expression='Heaviside(t-tau)', parameters='tau=1', breakpoints='tau; 1.5',
-                    symbolic_mode='라플라스 변환도 계산', position=0.)
-    assert result.data['boundaries'] == [0., 1., 1.5, 2.]
-    assert result.data['laplace_input'] is not None
-
-
-def test_symbolic_failure_preserves_numeric_result(monkeypatch):
-    def fail(*args, **kwargs):
-        raise NotImplementedError('test')
-    monkeypatch.setattr(sp, 'laplace_transform', fail)
-    result = custom(force_expression='sin(t)', symbolic_mode='라플라스 변환도 계산')
-    assert np.all(np.isfinite(result.data['values']))
-    assert result.data['laplace_input'] is None
-    result = LaplaceTopic().compute({'expression': 'sin(t)'})
-    assert 'values' in result.data
-    assert result.data['transformed'].has(sp.LaplaceTransform)
-
-
-@pytest.mark.parametrize('expression', ['1/t', 'sqrt(-t-1)', 'DiracDelta(t)', 'y+t'])
-def test_invalid_custom_force(expression):
-    with pytest.raises(ValueError):
-        custom(force_expression=expression)
-
-
 def test_parameter_settings_roundtrip(tmp_path):
     from engineering_math.core.project import save_settings, load_settings, export_results
-    result = custom(force_expression='A*cos(w*t)', parameters='A=2; w=3')
+    result = HeatTopic().compute({'initial': 'A*sin(pi*x/ell)', 'parameters': 'A=2', 'num_points': 201, 'time_points': 3})
     path = tmp_path/'parameters.json'
-    save_settings(path, 'ode', result.params)
-    assert load_settings(path)['params']['parameters'] == 'A=2; w=3'
+    save_settings(path, 'heat', result.params)
+    assert load_settings(path)['params']['parameters'] == 'A=2'
     export_results(tmp_path/'parameters.zip', result)

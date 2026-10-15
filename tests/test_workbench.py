@@ -25,7 +25,7 @@ def test_supported_configuration(entry):
 def test_single_topic_import_is_lazy():
     code = ('import sys; from engineering_math.topics import get_topic; get_topic("fourier"); '
             'assert "engineering_math.topics.chapter12" not in sys.modules; '
-            'assert "engineering_math.topics.ode" not in sys.modules')
+            'assert "engineering_math.topics.chapter11_transforms" not in sys.modules')
     subprocess.run([sys.executable, '-c', code], check=True)
 
 
@@ -57,7 +57,7 @@ def test_common_ui_routes_settings_and_lazy_canvas(tmp_path):
     window.show()
     try:
         assert len(window.selector.entries) == len(EXPERIMENTS)
-        assert window.selector.tree.topLevelItemCount() == 3
+        assert window.selector.tree.topLevelItemCount() == 2
         for index, entry in enumerate(EXPERIMENTS):
             window.selector.setCurrentIndex(index)
             assert window.topic.id == entry.topic

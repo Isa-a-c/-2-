@@ -44,8 +44,6 @@ EXPERIMENTS = (
     Experiment('disk_membrane', 'chapter12', 'DiskMembraneTopic', '12.10 · 원형 막', PDE, '파동', '원형 막 · 원주 고정', 'Fourier–Bessel 모드'),
     Experiment('coordinate_potential', 'chapter12', 'PotentialTopic', '12.11 · 퍼텐셜', PDE, '정상 상태 퍼텐셜', '원판 / 축대칭 구 · Dirichlet', '조화함수의 경계 전개'),
     Experiment('pde_laplace', 'chapter12', 'PdeLaplaceTopic', '12.12 · Laplace PDE', PDE, '파동', '반무한 현 · 초기값 0', 'Laplace 시간 지연 공식', {'mode': '반무한 현'}),
-    Experiment('ode', 'ode', 'OdeTopic', 'ODE · 질량–스프링–댐퍼', ODE, '질량–스프링–댐퍼', '직접 외력 · 초기값', '수치 적분 및 지원 외력의 독립 검산'),
-    Experiment('laplace', 'laplace', 'LaplaceTopic', 'Laplace 변환·역변환', TRANSFORM, 'Laplace 변환', '단측 변환 · 기호 계산', 'SymPy 변환과 수렴 조건'),
     Experiment('pde_laplace', 'chapter12', 'PdeLaplaceTopic', '12.12 · 반무한 열전도', PDE, '열전도', '반무한 막대 · 계단 경계·초기값 0', 'Laplace 기반 erfc 해', {'mode': '반무한 열전도'}),
 )
 
