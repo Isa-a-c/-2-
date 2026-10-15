@@ -17,7 +17,6 @@ from engineering_math.core.project import save_settings, load_settings, export_r
 from engineering_math.core.models import validate_params
 from .forms import InputForm
 from .jobs import CalculationJob
-from .ghost import snapshot, overlay, describe
 from .player import FigureAnimator, PlayerBar, ZoomCanvas, evolution_figure, HINT
 from .experiments import ExperimentSelector
 
@@ -186,14 +185,6 @@ class MainWindow(QMainWindow):
         self.auto.setChecked(self.settings.value('auto', 'true') in (True, 'true'))
         self.auto.toggled.connect(lambda checked: self.settings.setValue('auto', checked))
         layout.addWidget(self.auto)
-        self.ghost = QCheckBox('이전 결과 겹쳐 보기')
-        self.ghost.setToolTip('같은 구성을 다시 계산하면 바로 전 결과의 곡선을 흐린 파선으로 함께 그립니다. '
-                              '범례에 바뀐 입력값이 표시됩니다.')
-        self.ghost.setChecked(self.settings.value('ghost', 'true') in (True, 'true'))
-        self.ghost.toggled.connect(self.toggle_ghost)
-        layout.addWidget(self.ghost)
-        self.previous = None
-        self.latest = None
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.hide()
@@ -382,20 +373,10 @@ class MainWindow(QMainWindow):
         self.progress.hide()
         self.statusBar().showMessage('계산이 중지되었습니다.')
 
-    def toggle_ghost(self, checked):
-        self.settings.setValue('ghost', checked)
-        if self.result is not None:
-            self.present(self.result, refresh=True)
-
-    def present(self, result, refresh=False):
-        """refresh=True는 같은 결과를 다시 그릴 때(글자 크기, 겹쳐 보기 전환)이며 비교 대상을 바꾸지 않습니다."""
+    def present(self, result):
         self.progress.hide()
         if result.topic != self.topic.id:
             return
-        key = (result.topic, self.state_key)
-        if not refresh:
-            # 바로 전에 그린 같은 구성의 결과가 다음 비교 대상입니다.
-            self.previous = self.latest if self.latest is not None and self.latest[0] == key                 and self.latest[1] != result.params else None
         auto, self.auto_job = self.auto_job, False
         # 같은 구성을 다시 계산하면 보던 탭(그래프·표)에 그대로 머뭅니다.
         previous = self.result is not None and self.result.topic == result.topic
@@ -405,11 +386,6 @@ class MainWindow(QMainWindow):
             self.clear_output()
             blocker = QSignalBlocker(self.tabs)
             figures = self.topic.figures(result)
-            if not refresh:
-                self.latest = (key, result.params, snapshot(figures))
-            self.ghost_count = 0
-            if self.ghost.isChecked() and self.previous is not None:
-                self.ghost_count = overlay(figures, self.previous[2], describe(self.previous[1], result.params, self.topic.inputs))
             for name, figure in figures.items():
                 page = QWidget()
                 page.pending_figure = figure
@@ -567,7 +543,7 @@ class MainWindow(QMainWindow):
             self.form.details.setChecked(details)
             self.auto_timer.stop()
         if redraw and self.result is not None:
-            self.present(self.result, refresh=True)
+            self.present(self.result)
 
     def save(self):
         path, _ = QFileDialog.getSaveFileName(self, '설정 저장', '', 'JSON (*.json)')

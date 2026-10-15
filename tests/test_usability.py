@@ -214,39 +214,6 @@ def test_wheel_changes_values_only_in_focused_field(window):
     assert widget.value() != before
 
 
-def test_previous_result_is_overlaid(window):
-    from engineering_math.ui.ghost import GHOST_LABEL
-    window.ghost.setChecked(True)
-    window.selector.select('fourier')
-    window.present(window.topic.compute({'N': 3}))
-    assert window.ghost_count == 0
-    window.present(window.topic.compute({'N': 10}))
-    assert window.ghost_count > 0
-    figure = window.figures[0]
-    ghosts = [line for line in figure.axes[0].lines if line.get_label() == GHOST_LABEL]
-    assert ghosts and all(line.get_linestyle() == '--' for line in ghosts)
-    labels = [text.get_text() for text in figure.axes[0].get_legend().get_texts()]
-    assert any(label.startswith('Previous (N=3') for label in labels)
-    # 겹친 선은 재생 막대가 움직이지 않는 기준선입니다.
-    from engineering_math.ui.player import FigureAnimator
-    animator = FigureAnimator(figure)
-    animator.show(0)
-    assert all(line.get_visible() and len(line.get_xdata()) > 2 for line in ghosts)
-    # 글자 확대처럼 다시 그려도 비교 대상(N=3)은 그대로입니다.
-    window.set_zoom(1.15)
-    labels = [text.get_text() for text in window.figures[0].axes[0].get_legend().get_texts()]
-    assert any(label.startswith('Previous (N=3') for label in labels)
-    window.ghost.setChecked(False)
-    assert window.ghost_count == 0
-    assert not [line for line in window.figures[0].axes[0].lines if line.get_label() == GHOST_LABEL]
-    window.ghost.setChecked(True)
-    assert window.ghost_count > 0
-    # 다른 구성으로 바꾸면 겹치지 않습니다.
-    window.selector.select('half_range')
-    window.present(window.topic.compute({}))
-    assert window.ghost_count == 0
-
-
 def test_hidden_section_stays_out_of_tree_but_still_loads(window, tmp_path):
     from engineering_math.core.project import save_settings
     index = next(i for i, entry in enumerate(EXPERIMENTS) if entry.topic == 'transform_table')
