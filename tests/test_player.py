@@ -64,7 +64,8 @@ def test_classification_of_known_figures():
     sequence.show(0)
     solid = [line for line in figures['시간별 온도'].axes[0].lines if line.get_linestyle() == '-']
     assert [line.get_visible() for line in solid] == [True, False, False, False, False]
-    assert FigureAnimator(figures['시공간 히트맵']).frames == 1
+    from engineering_math.ui.player import _TimeLine
+    assert isinstance(FigureAnimator(figures['시공간 히트맵']).parts[0], _TimeLine)
     fourier = get_topic('fourier')
     sweep = FigureAnimator(fourier.figures(fourier.compute({}))['현재 부분합'])
     assert sweep.frames == SWEEP_FRAMES
@@ -214,3 +215,49 @@ def test_window_tabs_have_players(app, tmp_path):
     finally:
         window.close()
         app.processEvents()
+
+
+def test_heatmap_time_line_moves_through_time():
+    import matplotlib.pyplot as plt
+    heat = get_topic('heat')
+    result = heat.compute({})
+    figure = heat.figures(result)['시공간 히트맵']
+    animator = FigureAnimator(figure)
+    times = result.data['time']
+    assert animator.animated and animator.frames == min(len(times), 120)
+    np.testing.assert_allclose(animator.parts[0].times, times, atol=1e-12)
+    line = animator.parts[0].line
+    assert animator.show(0).endswith(f't = {times[0]:.4g}') and line.get_visible()
+    assert line.get_ydata()[0] == pytest.approx(times[0])
+    animator.show(animator.frames//2)
+    assert times[0] < line.get_ydata()[0] < times[-1]
+    animator.show(animator.frames-1)
+    assert not line.get_visible()
+    # x–y 평면의 막 변위는 시간축이 아니므로 정지 그래프입니다.
+    membrane = get_topic('rectangle_membrane')
+    assert FigureAnimator(membrane.figures(membrane.compute({}))['막의 변위']).frames == 1
+    plt.close('all')
+
+
+def test_play_pause_stop_buttons_and_seek(app):
+    from matplotlib.figure import Figure
+    from engineering_math.ui.player import PlayerBar, ZoomCanvas
+    figure = Figure()
+    figure.add_subplot().plot(np.linspace(0, 1, 50), np.linspace(0, 1, 50))
+    player = PlayerBar(FigureAnimator(figure), ZoomCanvas(figure))
+    buttons = player.buttons
+    assert player.seek == 6 and player.slider.pageStep() == 6
+    assert buttons['play'].isEnabled() and not buttons['pause'].isEnabled() and not buttons['stop'].isEnabled()
+    buttons['play'].click()
+    assert player.playing and player.slider.value() == 0
+    assert not buttons['play'].isEnabled() and buttons['pause'].isEnabled() and buttons['stop'].isEnabled()
+    player.tick()
+    buttons['pause'].click()
+    assert not player.playing and player.slider.value() == 1 and buttons['stop'].isEnabled()
+    buttons['next'].click()
+    assert player.slider.value() == 7
+    buttons['previous'].click()
+    assert player.slider.value() == 1
+    buttons['stop'].click()
+    assert not player.playing and player.slider.value() == player.slider.maximum()
+    assert not buttons['stop'].isEnabled() and buttons['play'].isEnabled()

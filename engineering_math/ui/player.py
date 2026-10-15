@@ -4,7 +4,8 @@
 
 - 실선이 셋 이상인 축: 그린 순서대로 한 개씩 나타납니다(시간별·차수별 곡선, 기저 함수).
 - 실선 한두 개, 표식 점, 줄기(stem), 막대: 왼쪽부터 그려 나갑니다(끝점에 움직이는 점 표시).
-- 점선·파선은 기준선이므로 그대로 두고, 색 지도·등고선만 있는 축은 정지 그래프입니다.
+- 세로축이 t인 시공간 히트맵: 시간선이 아래에서 위로 움직입니다.
+- 점선·파선은 기준선이므로 그대로 두고, x–y 평면의 색 지도·등고선은 정지 그래프입니다.
 
 주제의 animation() 데이터(시간에 따른 해, 막의 변위)는 evolution_figure로 '변화 과정' 그래프를 만들어
 같은 재생 막대로 움직입니다.
@@ -14,11 +15,15 @@ import numpy as np
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QStyle
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from matplotlib.collections import LineCollection
+from matplotlib.collections import LineCollection, QuadMesh
+from matplotlib.contour import ContourSet
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
 SWEEP_FRAMES = 60
+TIME_LABELS = ('t', 'time', 'Time', 't (time)')
+MAX_TIME_FRAMES = 120
+SEEK_FRACTION = .1
 SPEEDS = (('0.25×', .25), ('0.5×', .5), ('1×', 1.), ('2×', 2.), ('4×', 4.))
 LOOPS = ('한 번', '반복', '왕복')
 ZOOM_STEP = .8
@@ -80,6 +85,8 @@ class _Sweep:
     frames = SWEEP_FRAMES
 
     def show(self, progress):
+        # 첫 프레임에도 한 구간은 보이도록 합니다.
+        progress = max(progress, 1/SWEEP_FRAMES)
         done = progress >= 1
         for (line, x, y), dot in zip(self.lines, self.dots):
             n = max(1, math.ceil(progress*len(x)))
@@ -98,6 +105,56 @@ class _Sweep:
         return None
 
 
+class _TimeLine:
+    """세로축이 t인 시공간 히트맵 위에서 시간선을 움직입니다."""
+
+    def __init__(self, axes, times):
+        if len(times) > MAX_TIME_FRAMES:
+            times = times[np.linspace(0, len(times)-1, MAX_TIME_FRAMES).round().astype(int)]
+        self.times = times
+        self.line = axes.axhline(times[0], color='black', linewidth=1.6, zorder=5)
+        self.line.set_label('_재생 점')
+        self.line.set_visible(False)
+        self.text = axes.text(1.0, times[0], '', transform=axes.get_yaxis_transform(), ha='right', va='bottom',
+                              fontsize='small', bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=.8))
+        self.text.set_visible(False)
+
+    @property
+    def frames(self):
+        return len(self.times)
+
+    def show(self, progress):
+        index = int(round(progress*(len(self.times)-1)))
+        time = self.times[index]
+        visible = progress < 1
+        self.line.set_ydata([time, time])
+        self.text.set_y(time)
+        self.text.set_text(f' t = {time:.4g} ')
+        self.line.set_visible(visible)
+        self.text.set_visible(visible)
+        return f't = {time:.4g}'
+
+
+def _field_times(axes):
+    """히트맵의 시간 좌표를 돌려줍니다. 시간축 히트맵이 아니면 None입니다."""
+    if axes.get_ylabel().strip() not in TIME_LABELS:
+        return None
+    fields = [c for c in axes.collections if isinstance(c, (QuadMesh, ContourSet))] + list(axes.images)
+    if not fields:
+        return None
+    mesh = next((c for c in fields if isinstance(c, QuadMesh)), None)
+    if mesh is not None:
+        rows = np.asarray(mesh.get_coordinates())[:, 0, 1]
+        # 평면 음영은 칸 경계 좌표를 가지므로 칸 중심(실제 시간 표본)으로 바꿉니다.
+        times = (rows[:-1]+rows[1:])/2 if len(rows) == np.shape(mesh.get_array())[0]+1 else rows
+        times = np.sort(times)
+    else:
+        times = np.linspace(*sorted(axes.get_ylim()), SWEEP_FRAMES)
+    low, high = sorted(axes.get_ylim())
+    times = times[(times >= low) & (times <= high)]
+    return times if len(times) > 1 else None
+
+
 class FigureAnimator:
     """그래프 하나의 프레임을 계산합니다. frames가 1이면 정지 그래프입니다."""
 
@@ -113,7 +170,10 @@ class FigureAnimator:
             markers = [line for line in axes.lines if _markers(line)]
             stems = [c for c in axes.collections if isinstance(c, LineCollection) and len(c.get_segments()) > 2]
             bars = [p for p in axes.patches if isinstance(p, Rectangle)]
-            if len(solid) >= 3:
+            times = _field_times(axes)
+            if times is not None:
+                self.parts.append(_TimeLine(axes, times))
+            elif len(solid) >= 3:
                 self.parts.append(_Sequence(solid))
             elif solid or markers or stems or len(bars) > 2:
                 self.parts.append(_Sweep(axes, solid, markers, stems, bars if len(bars) > 2 else []))
@@ -128,7 +188,6 @@ class FigureAnimator:
         if self.custom is not None:
             return self.custom['show'](index)
         progress = 1. if self.frames <= 1 else index/(self.frames-1)
-        progress = max(progress, 1/SWEEP_FRAMES)
         labels = [part.show(progress) for part in self.parts]
         label = next((text for text in labels if text and not text.startswith('_')), '')
         return f'{index+1}/{self.frames}  {label}'.rstrip()
@@ -240,12 +299,16 @@ class PlayerBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 2, 0, 2)
         self.buttons = {}
-        for key, icon, tip in [('first', QStyle.StandardPixmap.SP_MediaSkipBackward, '처음 (Home)'),
-                               ('previous', QStyle.StandardPixmap.SP_MediaSeekBackward, '이전 프레임 (←)'),
-                               ('play', QStyle.StandardPixmap.SP_MediaPlay, '재생 / 일시정지 (Space)'),
-                               ('next', QStyle.StandardPixmap.SP_MediaSeekForward, '다음 프레임 (→)'),
-                               ('last', QStyle.StandardPixmap.SP_MediaSkipForward, '끝 (End)')]:
-            button = QPushButton()
+        self.seek = max(1, round(animator.frames*SEEK_FRACTION))
+        for key, icon, text, tip in [
+                ('first', QStyle.StandardPixmap.SP_MediaSkipBackward, '', '처음 (Home)'),
+                ('previous', QStyle.StandardPixmap.SP_MediaSeekBackward, '', f'뒤로 {self.seek}프레임 (전체의 약 10%). 한 프레임씩은 ← 키'),
+                ('play', QStyle.StandardPixmap.SP_MediaPlay, '재생', '재생 (Space로 재생·일시정지 전환)'),
+                ('pause', QStyle.StandardPixmap.SP_MediaPause, '일시정지', '지금 프레임에서 멈춤'),
+                ('stop', QStyle.StandardPixmap.SP_MediaStop, '정지', '멈추고 원래 그래프(마지막 프레임)로 돌아감'),
+                ('next', QStyle.StandardPixmap.SP_MediaSeekForward, '', f'앞으로 {self.seek}프레임 (전체의 약 10%). 한 프레임씩은 → 키'),
+                ('last', QStyle.StandardPixmap.SP_MediaSkipForward, '', '끝 (End)')]:
+            button = QPushButton(text)
             button.setIcon(style.standardIcon(icon))
             button.setToolTip(tip)
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -271,9 +334,13 @@ class PlayerBar(QWidget):
         self.timer.timeout.connect(self.tick)
         self.speed.currentIndexChanged.connect(self.update_interval)
         self.buttons['first'].clicked.connect(lambda: self.go(0))
-        self.buttons['previous'].clicked.connect(lambda: self.go(self.slider.value()-1))
-        self.buttons['play'].clicked.connect(self.toggle)
-        self.buttons['next'].clicked.connect(lambda: self.go(self.slider.value()+1))
+        self.buttons['previous'].clicked.connect(lambda: self.go(self.slider.value()-self.seek))
+        self.buttons['play'].clicked.connect(self.play)
+        self.buttons['pause'].clicked.connect(self.pause)
+        self.buttons['stop'].clicked.connect(self.stop)
+        self.buttons['next'].clicked.connect(lambda: self.go(self.slider.value()+self.seek))
+        self.slider.setToolTip('끌어서 프레임 이동 · ←/→ 한 프레임 · PageUp/PageDown 10%')
+        self.slider.setPageStep(self.seek)
         self.buttons['last'].clicked.connect(lambda: self.go(self.slider.maximum()))
         self.slider.valueChanged.connect(self.show_frame)
         self.update_interval()
@@ -281,6 +348,7 @@ class PlayerBar(QWidget):
             start = (animator.custom or {}).get('start', animator.frames-1)
             self.slider.setValue(start)
             self.show_frame(start)
+            self.update_buttons()
         else:
             for widget in (*self.buttons.values(), self.slider, self.speed, self.loop):
                 widget.setEnabled(False)
@@ -302,23 +370,37 @@ class PlayerBar(QWidget):
     def show_frame(self, index):
         self.label.setText(self.animator.show(index))
         self.canvas.draw_idle()
+        if self.animator.animated:
+            self.update_buttons()
         self.frameChanged.emit(index)
 
+    def update_buttons(self):
+        """재생 중에는 재생 단추를 누른 상태로 보이고 일시정지·정지 단추를 켭니다."""
+        playing = self.playing
+        self.buttons['play'].setEnabled(not playing)
+        self.buttons['pause'].setEnabled(playing)
+        self.buttons['stop'].setEnabled(playing or self.slider.value() != self.slider.maximum())
+
     def toggle(self):
-        if self.playing:
-            self.pause()
-            return
-        if not self.animator.animated:
+        self.pause() if self.playing else self.play()
+
+    def play(self):
+        if self.playing or not self.animator.animated:
             return
         if self.loop.currentText() != '왕복' and self.slider.value() >= self.slider.maximum():
             self.slider.setValue(0)
         self.direction = 1 if self.loop.currentText() != '왕복' or self.slider.value() < self.slider.maximum() else -1
         self.timer.start()
-        self.buttons['play'].setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+        self.update_buttons()
 
     def pause(self):
         self.timer.stop()
-        self.buttons['play'].setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        self.update_buttons()
+
+    def stop(self):
+        self.timer.stop()
+        self.go(self.slider.maximum())
+        self.update_buttons()
 
     def tick(self):
         value, last, mode = self.slider.value(), self.slider.maximum(), self.loop.currentText()
