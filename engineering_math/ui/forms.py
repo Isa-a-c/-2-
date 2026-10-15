@@ -5,6 +5,39 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QHBoxLayout, QSlider, QSpin
 from engineering_math.topics.catalog import NUMERICAL_KEYS
 
 
+class _FocusWheel:
+    """클릭해 선택한 칸에서만 휠로 값을 바꿉니다.
+
+    선택하지 않은 칸 위에서 휠을 돌리면 이벤트를 무시해 부모 스크롤 영역으로 넘깁니다.
+    폼을 내리다 커서가 숫자 칸을 지나가도 값이 바뀌거나 자동 계산이 돌지 않습니다.
+    """
+
+    def setup_focus(self):
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event):
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
+
+class SpinBox(_FocusWheel, QSpinBox):
+    pass
+
+
+class DoubleSpinBox(_FocusWheel, QDoubleSpinBox):
+    pass
+
+
+class ComboBox(_FocusWheel, QComboBox):
+    pass
+
+
+class Slider(_FocusWheel, QSlider):
+    pass
+
+
 class InputForm(QWidget):
     changed = Signal()
 
@@ -24,9 +57,10 @@ class InputForm(QWidget):
         self.details.setVisible(any(spec.key in NUMERICAL_KEYS for spec in specs))
         for spec in specs:
             if spec.kind == 'int':
-                widget = QSpinBox()
+                widget = SpinBox()
                 widget.setRange(int(spec.minimum), int(spec.maximum))
-                slider = QSlider(Qt.Orientation.Horizontal)
+                slider = Slider(Qt.Orientation.Horizontal)
+                slider.setup_focus()
                 slider.setRange(int(spec.minimum), int(spec.maximum))
                 slider.valueChanged.connect(widget.setValue)
                 widget.valueChanged.connect(slider.setValue)
@@ -40,18 +74,20 @@ class InputForm(QWidget):
                 layout.addWidget(slider, 1)
                 layout.addWidget(widget)
             elif spec.kind == 'float':
-                widget = QDoubleSpinBox()
+                widget = DoubleSpinBox()
                 widget.setDecimals(6)
                 widget.setRange(spec.minimum, spec.maximum)
                 row = widget
             elif spec.kind == 'choice':
-                widget = QComboBox()
+                widget = ComboBox()
                 widget.addItems(spec.choices)
                 row = widget
             else:
                 widget = QLineEdit()
                 widget.setMaxLength(1000)
                 row = widget
+            if isinstance(widget, _FocusWheel):
+                widget.setup_focus()
             widget.setToolTip(spec.help)
             self.fields[spec.key] = widget
             self.rows[spec.key] = row

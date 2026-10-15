@@ -141,30 +141,33 @@ def test_zoom_changes_fonts_and_is_remembered(window):
     assert QApplication.font().pointSizeF() == pytest.approx(base)
 
 
-def test_custom_examples_are_grouped(window):
+def test_custom_entry_for_free_input(window):
     from engineering_math.ui.experiments import CUSTOM_GROUP, ROLE
     selector = window.selector
     for index, entry in enumerate(selector.entries):
         selector.ensure_examples(index)
-        groups = [entry.child(i) for i in range(entry.childCount()) if entry.child(i).text(0) == CUSTOM_GROUP]
-        direct = [entry.child(i).text(0) for i in range(entry.childCount()) if entry.child(i).text(0) != CUSTOM_GROUP]
-        assert all(name.startswith('교재 ') for name in direct)
-        assert len(groups) <= 1
-        for group in groups:
-            names = [group.child(j).text(0) for j in range(group.childCount())]
-            assert names and not any(name.startswith('교재 ') for name in names)
-    # 사용자 지정 예시를 고르면 묶음이 펼쳐지고 바로 계산합니다.
+        names = [entry.child(i).text(0) for i in range(entry.childCount())]
+        # 교재 예제만 남고 마지막에 직접 입력하는 '사용자 지정' 항목 하나가 있습니다.
+        assert names[-1] == CUSTOM_GROUP and entry.child(entry.childCount()-1).childCount() == 0
+        assert all(name.startswith('교재 ') for name in names[:-1])
     selector.select('heat')
-    group = next(selector.entries[selector.currentIndex()].child(i) for i in range(selector.entries[selector.currentIndex()].childCount())
-                 if selector.entries[selector.currentIndex()].child(i).text(0) == CUSTOM_GROUP)
-    name = group.child(0).text(0)
-    selector.choose_example(name)
-    assert group.isExpanded() and selector.tree.currentItem().text(0) == name
+    selector.choose_custom()
+    assert window.custom_mode and window.form.values()['initial'] == 'sin(pi*x/l)'
+    assert selector.tree.currentItem().text(0) == CUSTOM_GROUP
+    window.form.fields['initial'].setText('x*(1-x)')
+    window.form.fields['alpha'].setValue(.3)
     wait(window)
-    assert window.result is not None
-    selector.search.setText(name)
-    assert not group.isHidden() and not group.child(0).isHidden()
-    selector.search.clear()
+    assert window.result is not None and window.result.params['initial'] == 'x*(1-x)'
+    # 교재 예제를 골랐다가 사용자 지정으로 돌아오면 직접 입력한 값이 남아 있습니다.
+    selector.choose_example(selector.example_names(selector.currentIndex())[0])
+    wait(window)
+    assert not window.custom_mode and window.form.values()['initial'] != 'x*(1-x)'
+    selector.choose_custom()
+    assert window.form.values()['initial'] == 'x*(1-x)' and window.form.values()['alpha'] == .3
+    # 다른 절의 사용자 지정은 따로 기억합니다.
+    selector.select('wave')
+    selector.choose_custom()
+    assert window.form.values()['initial'] == 'sin(pi*x/l)'
 
 
 def test_player_buttons_are_icon_only(app=None):
@@ -177,3 +180,68 @@ def test_player_buttons_are_icon_only(app=None):
     player = PlayerBar(FigureAnimator(figure), ZoomCanvas(figure))
     assert all(button.text() == '' and not button.icon().isNull() and button.toolTip()
                for button in player.buttons.values())
+
+
+def test_wheel_changes_values_only_in_focused_field(window):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QApplication
+    window.selector.select('heat')
+    widget = window.form.fields['alpha']
+    before = widget.value()
+
+    def wheel(target):
+        center = QPointF(target.width()/2, target.height()/2)
+        event = QWheelEvent(center, target.mapToGlobal(center), QPoint(), QPoint(0, 120), Qt.MouseButton.NoButton,
+                            Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
+        QApplication.sendEvent(target, event)
+
+    window.setFocus()
+    wheel(widget)
+    assert widget.value() == before and not window.auto_timer.isActive()
+    from PySide6.QtWidgets import QSlider, QSpinBox, QComboBox
+    n = window.form.values()['N']
+    wheel(window.form.rows['N'].findChild(QSlider))
+    wheel(window.form.rows['N'].findChild(QSpinBox))
+    assert window.form.values()['N'] == n
+    mode = window.form.fields['mode']
+    text = mode.currentText()
+    wheel(mode)
+    assert mode.currentText() == text
+    widget.setFocus()
+    QApplication.processEvents()
+    wheel(widget)
+    assert widget.value() != before
+
+
+def test_previous_result_is_overlaid(window):
+    from engineering_math.ui.ghost import GHOST_LABEL
+    window.ghost.setChecked(True)
+    window.selector.select('fourier')
+    window.present(window.topic.compute({'N': 3}))
+    assert window.ghost_count == 0
+    window.present(window.topic.compute({'N': 10}))
+    assert window.ghost_count > 0
+    figure = window.figures[0]
+    ghosts = [line for line in figure.axes[0].lines if line.get_label() == GHOST_LABEL]
+    assert ghosts and all(line.get_linestyle() == '--' for line in ghosts)
+    labels = [text.get_text() for text in figure.axes[0].get_legend().get_texts()]
+    assert any(label.startswith('Previous (N=3') for label in labels)
+    # 겹친 선은 재생 막대가 움직이지 않는 기준선입니다.
+    from engineering_math.ui.player import FigureAnimator
+    animator = FigureAnimator(figure)
+    animator.show(0)
+    assert all(line.get_visible() and len(line.get_xdata()) > 2 for line in ghosts)
+    # 글자 확대처럼 다시 그려도 비교 대상(N=3)은 그대로입니다.
+    window.set_zoom(1.15)
+    labels = [text.get_text() for text in window.figures[0].axes[0].get_legend().get_texts()]
+    assert any(label.startswith('Previous (N=3') for label in labels)
+    window.ghost.setChecked(False)
+    assert window.ghost_count == 0
+    assert not [line for line in window.figures[0].axes[0].lines if line.get_label() == GHOST_LABEL]
+    window.ghost.setChecked(True)
+    assert window.ghost_count > 0
+    # 다른 구성으로 바꾸면 겹치지 않습니다.
+    window.selector.select('half_range')
+    window.present(window.topic.compute({}))
+    assert window.ghost_count == 0

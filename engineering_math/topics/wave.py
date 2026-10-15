@@ -47,12 +47,7 @@ class WaveTopic:
         InputSpec('comparison_alpha', '비교 열확산계수 α', 'float', .1, .000001, 1000,
                   help='열·파동 비교 그림에만 사용하며 파동 해에는 영향을 주지 않습니다.'),
     )
-    examples = {
-        '기본 사인 모드': {},
-        '두 사인 모드': {'initial': 'sin(pi*x/l)+0.5*sin(3*pi*x/l)'},
-        '삼각형 초기 변위': {'initial': '1-abs(2*x/l-1)'},
-        '초기 속도만 부여': {'initial': '0', 'velocity': 'sin(pi*x/l)'},
-    }
+    examples = {}
 
     def compute(self, params):
         params = validate_params(self.inputs, params)

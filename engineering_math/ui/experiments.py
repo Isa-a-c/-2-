@@ -1,7 +1,8 @@
 """교재 장 → 절 → 예제 순서의 트리 선택기입니다.
 
-절 항목을 누르면 그 실험 구성으로 바뀌고, 예제 항목을 누르면 구성을 바꾼 뒤
-exampleChosen 신호로 예제 이름을 알립니다. 예제 목록은 주제 모듈을 가져와야 하므로
+절 항목을 누르면 그 실험 구성으로 바뀌고, 교재 예제 항목을 누르면 구성을 바꾼 뒤
+exampleChosen 신호로 예제 이름을 알립니다. 각 절의 마지막 '사용자 지정' 항목은 사용자가 함수·매개변수를
+직접 입력하는 자리이며 customChosen 신호를 보냅니다. 예제 목록은 주제 모듈을 가져와야 하므로
 절을 처음 펼치거나 선택할 때 채웁니다.
 """
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
@@ -11,7 +12,6 @@ from engineering_math.topics.textbook import EXAMPLES as TEXTBOOK
 
 CHAPTERS = (('11.', '11장 Fourier 해석'), ('12.', '12장 편미분방정식'))
 ROLE = Qt.ItemDataRole.UserRole
-TEXTBOOK_PREFIX = '교재 '
 CUSTOM_GROUP = '사용자 지정'
 
 
@@ -29,6 +29,7 @@ def entry_examples(entry, topic):
 class ExperimentSelector(QWidget):
     currentIndexChanged = Signal(int)
     exampleChosen = Signal(str)
+    customChosen = Signal()
 
     def __init__(self):
         super().__init__()
@@ -99,45 +100,40 @@ class ExperimentSelector(QWidget):
 
     # ── 예제 항목 ──────────────────────────────────────────────
     def ensure_examples(self, index):
-        """교재 예제는 절 바로 아래에, 그 밖의 예시는 '사용자 지정' 묶음 아래에 둡니다."""
+        """절 아래에 교재 예제를 두고, 마지막에 직접 입력하는 '사용자 지정' 항목을 둡니다."""
         if index in self.loaded:
             return
         from engineering_math.topics import get_topic
         self.loaded.add(index)
         item = self.entries[index]
         item.takeChildren()
-        names = entry_examples(EXPERIMENTS[index], get_topic(EXPERIMENTS[index].topic))
-        custom = [name for name in names if not name.startswith(TEXTBOOK_PREFIX)]
-        for name in names:
-            if name not in custom:
-                self.add_example(item, index, name)
-        if custom:
-            group = QTreeWidgetItem(item, [CUSTOM_GROUP])
-            group.setData(0, ROLE, ('custom', index))
-            group.setToolTip(0, '교재 예제가 아닌 연습용 함수입니다.')
-            for name in custom:
-                self.add_example(group, index, name)
-        if not item.childCount():
-            item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicator)
-
-    @staticmethod
-    def add_example(parent, index, name):
-        child = QTreeWidgetItem(parent, [name])
-        child.setData(0, ROLE, ('example', index, name))
-        child.setToolTip(0, name)
+        for name in entry_examples(EXPERIMENTS[index], get_topic(EXPERIMENTS[index].topic)):
+            child = QTreeWidgetItem(item, [name])
+            child.setData(0, ROLE, ('example', index, name))
+            child.setToolTip(0, name)
+        custom = QTreeWidgetItem(item, [CUSTOM_GROUP])
+        custom.setData(0, ROLE, ('custom', index))
+        custom.setToolTip(0, '함수와 매개변수를 직접 입력해 계산합니다. 입력한 내용은 이 절에서 다시 열 때 그대로 남아 있습니다.')
+        font = custom.font(0)
+        font.setItalic(True)
+        custom.setFont(0, font)
 
     def example_items(self, index):
-        """교재 예제와 사용자 지정 예시 항목을 화면 순서대로 돌려줍니다."""
+        """교재 예제 항목을 화면 순서대로 돌려줍니다('사용자 지정' 제외)."""
         self.ensure_examples(index)
-        items = []
         item = self.entries[index]
-        for i in range(item.childCount()):
-            child = item.child(i)
-            if child.data(0, ROLE)[0] == 'custom':
-                items.extend(child.child(j) for j in range(child.childCount()))
-            else:
-                items.append(child)
-        return items
+        return [item.child(i) for i in range(item.childCount()) if item.child(i).data(0, ROLE)[0] == 'example']
+
+    def custom_item(self, index):
+        self.ensure_examples(index)
+        item = self.entries[index]
+        return next(item.child(i) for i in range(item.childCount()) if item.child(i).data(0, ROLE)[0] == 'custom')
+
+    def choose_custom(self):
+        """현재 구성의 '사용자 지정' 항목을 선택하고 customChosen을 보냅니다."""
+        with QSignalBlocker(self.tree):
+            self.tree.setCurrentItem(self.custom_item(self._index))
+        self.customChosen.emit()
 
     def example_names(self, index):
         return [child.text(0) for child in self.example_items(index)]
@@ -146,8 +142,6 @@ class ExperimentSelector(QWidget):
         """현재 구성의 예제 항목을 선택하고 exampleChosen을 보냅니다."""
         for child in self.example_items(self._index):
             if child.text(0) == name:
-                if child.parent() is not self.entries[self._index]:
-                    child.parent().setExpanded(True)
                 with QSignalBlocker(self.tree):
                     self.tree.setCurrentItem(child)
                 self.exampleChosen.emit(name)
@@ -164,12 +158,15 @@ class ExperimentSelector(QWidget):
         if not data:
             return
         self.setCurrentIndex(data[1])
-        if data[0] in ('entry', 'custom'):
+        if data[0] == 'entry':
             self.ensure_examples(data[1])
             item.setExpanded(True)
+            return
+        with QSignalBlocker(self.tree):
+            self.tree.setCurrentItem(item)
+        if data[0] == 'custom':
+            self.customChosen.emit()
         else:
-            with QSignalBlocker(self.tree):
-                self.tree.setCurrentItem(item)
             self.exampleChosen.emit(data[2])
 
     def apply_filter(self, text):
@@ -185,17 +182,6 @@ class ExperimentSelector(QWidget):
             matches = 0
             for i in range(item.childCount()):
                 child = item.child(i)
-                if child.data(0, ROLE) and child.data(0, ROLE)[0] == 'custom':
-                    inner = 0
-                    for j in range(child.childCount()):
-                        hit = own or text in child.child(j).text(0).lower()
-                        child.child(j).setHidden(not hit)
-                        inner += hit
-                    child.setHidden(not inner)
-                    if text and inner and not own:
-                        child.setExpanded(True)
-                    matches += inner
-                    continue
                 hit = own or text in child.text(0).lower()
                 child.setHidden(not hit)
                 matches += hit

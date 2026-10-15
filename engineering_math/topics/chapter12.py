@@ -113,14 +113,7 @@ class PdeBasicsTopic:
         InputSpec('c', 'c (w의 계수)', 'text', '-1', visible_in=(ODE_MODE,)),
         InputSpec('g', '우변 g(x,y)', 'text', '0', visible_in=(ODE_MODE,)),
     )
-    examples = {'Poisson 다항식': {'mode': 'Poisson', 'candidate': 'x^2+y^2', 'forcing': '4'},
-                '열방정식 해': {'mode': '열', 'candidate': 'exp(-0.1*pi^2*t)*sin(pi*x)'},
-                '진행파': {'mode': '파동', 'candidate': 'sin(x-t)'}, '해가 아닌 함수': {'candidate': 'x^2+y^2'},
-                '연습문제 17: u_xx + 16π²u = 0': {'mode': ODE_MODE, 'c': '16*pi^2'},
-                '연습문제 19: u_y + y²u = 0': {'mode': ODE_MODE, 'variable': 'y', 'a': '0', 'b': '1', 'c': 'y^2'},
-                '연습문제 21: u_yy + 6u_y + 13u = 4e^(3y)': {'mode': ODE_MODE, 'variable': 'y', 'b': '6', 'c': '13', 'g': '4*exp(3*y)'},
-                '연습문제 22: u_xy = u_x': {'mode': ODE_MODE, 'variable': 'y', 'substitution': SUBSTITUTIONS[1], 'a': '0', 'b': '1', 'c': '-1'},
-                '연습문제 23: x²u_xx + 2xu_x − 2u = 0': {'mode': ODE_MODE, 'a': 'x^2', 'b': '2*x', 'c': '-2'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -250,11 +243,7 @@ class PdeClassificationTopic:
               InputSpec('B', '계수 B(x,y) (방정식에서는 2B u_xy)', 'text', '0'),
               InputSpec('C', '계수 C(x,y)', 'text', '-1'), PARAMETERS,
               InputSpec('extent', '분류 지도 범위 [−X,X]²', 'float', 2., .1, 100))
-    examples = {'열방정식 (y=c²t): u_xx = u_y': {'C': '0'},
-                'Laplace 방정식': {'C': '1'},
-                'Tricomi 방정식 y u_xx + u_yy (혼합형)': {'A': 'y', 'C': '1'},
-                '연습문제 13: u_xx + 5u_xy + 4u_yy': {'B': '5/2', 'C': '4'},
-                '연습문제 14: x u_xy − y u_yy': {'A': '0', 'B': 'x/2', 'C': '-y'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -364,9 +353,7 @@ class DalembertTopic(EvolutionTopic):
               InputSpec('extent', '표시 반폭 X', 'float', 5., .1, 100),
               InputSpec('num_points', '공간 표본 수', 'int', 501, 101, 2001),
               InputSpec('quadrature_points', '속도 적분 표본 수', 'int', 8001, 1001, 32001)) + TIME_INPUTS
-    examples = {'양방향 Gaussian': {}, '속도만 부여': {'initial': '0', 'velocity': 'exp(-x^2)'},
-                '오른쪽 진행파': {'initial': 'sin(x)', 'velocity': '-cos(x)'},
-                '삼각 펄스': {'initial': 'Piecewise((1-abs(x),abs(x)<1),(0,True))'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -403,9 +390,7 @@ class InfiniteHeatTopic(EvolutionTopic):
               InputSpec('extent', '표시 반폭 X', 'float', 5., .1, 100),
               InputSpec('num_points', '공간 표본 수', 'int', 401, 101, 1001),
               InputSpec('quadrature_points', '합성곱 격자 점 수', 'int', 16385, 2049, 65537)) + TIME_INPUTS
-    examples = {'Gaussian 확산': {}, '상수 보존': {'initial': '3'},
-                '사각 펄스': {'initial': 'Piecewise((1,abs(x)<1),(0,True))'},
-                '반무한 막대: 일정 초기온도': {'mode': MODES[1], 'initial': '1'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -538,8 +523,7 @@ class MembraneTopic:
               InputSpec('speed', '파동 속력 c', 'float', 1., .01, 20),
               InputSpec('N', '방향별 모드 수 N', 'int', 6, 1, 16),
               InputSpec('num_points', '방향별 공간 표본 수', 'int', 81, 41, 161)) + TIME_INPUTS
-    examples = {'기본 모드': {}, '두 모드': {'initial': 'sin(pi*x/l)*sin(pi*y/height)+0.4*sin(2*pi*x/l)*sin(3*pi*y/height)'},
-                '속도만 부여': {'initial': '0', 'velocity': 'sin(pi*x/l)*sin(pi*y/height)'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -687,8 +671,7 @@ class DiskMembraneTopic(MembraneTopic):
               InputSpec('angular_count', '최대 각도 차수 m', 'int', 2, 0, 6),
               InputSpec('num_points', '방사 표본 수', 'int', 101, 41, 201),
               InputSpec('angular_points', '각도 표본 수', 'int', 81, 33, 161)) + TIME_INPUTS
-    examples = {'비축대칭 막': {'initial': '(r/l)*(1-r/l)*cos(theta)'},
-                '기본 Bessel 모드': {'initial': 'besselj(0,2.404825557695773*r/l)', 'radial_count': 1, 'angular_count': 0}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -752,9 +735,7 @@ class RectangleLaplaceTopic:
               InputSpec('N', '변마다 급수 차수 N', 'int', 30, 1, 200),
               InputSpec('num_points', '방향별 표시 표본 수', 'int', 101, 41, 301),
               InputSpec('quadrature_points', '경계 구적 노드 수', 'int', 1024, 128, 8192))
-    examples = {'윗변 사인 경계': {}, '윗변 일정 온도': {'top': '1'},
-                '네 변 모두 1': {'top': '1', 'bottom': '1', 'left': '1', 'right': '1'},
-                '위·아래 다른 온도': {'top': '1', 'bottom': '0.5'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -810,10 +791,7 @@ class PotentialTopic:
               InputSpec('radius', '반지름 R', 'float', 1., .05, 20),
               InputSpec('N', '최대 차수 N', 'int', 8, 1, 30),
               InputSpec('num_points', '경계 구적 노드 수', 'int', 1001, 201, 8001))
-    examples = {'원판 사중극': {}, '원판 상수': {'boundary': '3'},
-                '구 쌍극': {'mode': MODES[1], 'boundary': 'mu'},
-                '구 사중극': {'mode': MODES[1], 'boundary': '(3*mu^2-1)/2'},
-                '구 외부 쌍극': {'mode': MODES[2], 'boundary': 'mu'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -866,8 +844,7 @@ class PdeLaplaceTopic(EvolutionTopic):
               InputSpec('amplitude', '계단 경계 온도 A', 'float', 1., -100, 100, visible_in=('반무한 열전도',)),
               InputSpec('extent', '표시 길이 X', 'float', 8., .1, 100),
               InputSpec('num_points', '공간 표본 수', 'int', 501, 101, 2001)) + TIME_INPUTS
-    examples = {'계단 진행파': {'boundary': '1'},
-                '열 침투': {'mode': '반무한 열전도'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)

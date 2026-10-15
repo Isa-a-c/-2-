@@ -61,10 +61,7 @@ class HeatTopic:
         InputSpec('time_points', '시간 표본 수', 'int', 101, 2, 501),
         InputSpec('end_time', '마지막 시간', 'float', 1., .000001, 10000),
     )
-    examples = {'기본 사인 모드': {}, '두 사인 모드': {'initial': 'sin(pi*x/l)+0.5*sin(3*pi*x/l)'},
-                '삼각형 초기 온도': {'initial': '1-abs(2*x/l-1)'},
-                '정상 상태': {'initial': '20+60*x/l', 'left': 20., 'right': 80.},
-                '단열 막대의 코사인 모드': {'mode': INSULATED, 'initial': '1+cos(pi*x/l)'}}
+    examples = {}
 
     def compute(self, params):
         params = validate_params(self.inputs, params)

@@ -82,8 +82,7 @@ class IntegralTopic(StaticTopic):
         InputSpec('mode', '실험', 'choice', '적분 표현과 복원', choices=('적분 표현과 복원', LIMIT_MODE)),
         InputSpec('periods', '비교할 주기 2L (쉼표 구분)', 'text', '4, 8, 16', visible_in=(LIMIT_MODE,)),
     )
-    examples = {'Gaussian': {}, '사각 펄스': {'function': 'Piecewise((1, abs(x)<1), (0, True))'},
-                '비대칭 펄스': {'function': 'Piecewise((1, And(x>0,x<2)), (0, True))'}}
+    examples = {}
     kind = 'integral'
 
     def compute(self, params):
@@ -150,8 +149,7 @@ class SineCosineTopic(IntegralTopic):
     title = '11.8 · Fourier 사인·코사인 변환'
     description = '양의 반축 함수의 변환·복원을 비교합니다. 정변환과 역변환에 모두 √(2/π)를 사용합니다.'
     inputs = TRANSFORM_INPUTS + (InputSpec('mode', '변환 종류', 'choice', '코사인', choices=('코사인', '사인')),)
-    examples = {'코사인 Gaussian': {}, '사인 지수감쇠': {'mode': '사인', 'function': 'exp(-x)'},
-                '사인 x Gaussian': {'mode': '사인', 'function': 'x*exp(-x^2/2)'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -198,10 +196,7 @@ class ContinuousTransformTopic(IntegralTopic):
         InputSpec('mode', '실험', 'choice', MODES[0], choices=MODES),
         InputSpec('second', '두 번째 함수 g(x)', 'text', 'exp(-x^2/2)', visible_in=(MODES[1],)),
     )
-    examples = {'Gaussian 자기 변환': {}, '이동 Gaussian': {'function': 'exp(-(x-2)^2/2)'},
-                '양측 지수': {'function': 'exp(-abs(x))'},
-                '합성곱 정리: 사각 펄스 두 개': {'mode': MODES[1], 'function': 'Heaviside(x+1,1/2)-Heaviside(x-1,1/2)',
-                                        'second': 'Heaviside(x+1,1/2)-Heaviside(x-1,1/2)', 'num_points': 8001}}
+    examples = {}
 
     def compute(self, params):
         result = super().compute(params)
@@ -317,9 +312,7 @@ class DiscreteFourierTopic:
               InputSpec('function', '주기 2π 함수 f(x)', 'text', 'x^2', visible_in=(MODES[1],)),
               InputSpec('parameters', '매개변수 (A=2; w=3)', 'text', '', visible_in=(MODES[1],)),
               InputSpec('N', '표본 수 N', 'int', 8, 2, 64, visible_in=(MODES[1],)))
-    examples = {'사각파 8표본': {'data': '1,1,1,1,-1,-1,-1,-1'},
-                '함수 표본 cos 3x (N=16)': {'mode': MODES[1], 'function': 'cos(3*x)', 'N': 16},
-                'Aliasing: cos 7x를 N=8로 표본화': {'mode': MODES[1], 'function': 'cos(7*x)', 'N': 8}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -545,12 +538,7 @@ class TransformTableTopic(IntegralTopic):
         InputSpec('c', '매개변수 c', 'float', 2., -20, 20),
         InputSpec('n', '정수 n (표 I-6·II-7)', 'int', 2, 0, 8),
     ) + TRANSFORM_INPUTS[2:]
-    examples = {'Gaussian 검산': {}, '사각 펄스와 sinc': {'pair': pair_by_key('표 III-1').label},
-                '이동 펄스의 위상': {'pair': pair_by_key('표 III-2').label, 'b': .5, 'c': 2.5},
-                '사인 지수': {'pair': pair_by_key('표 II-5').label},
-                '삼각형 펄스 (표 III-4 보정)': {'pair': pair_by_key('표 III-4').label},
-                '복소 원함수 e^(iax)': {'pair': pair_by_key('표 III-7').label, 'a': 2.},
-                'J₀(ax): 공식만 표시': {'pair': pair_by_key('표 I-12').label}}
+    examples = {}
 
     @staticmethod
     def migrate(params):

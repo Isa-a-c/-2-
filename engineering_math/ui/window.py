@@ -17,6 +17,7 @@ from engineering_math.core.project import save_settings, load_settings, export_r
 from engineering_math.core.models import validate_params
 from .forms import InputForm
 from .jobs import CalculationJob
+from .ghost import snapshot, overlay, describe
 from .player import FigureAnimator, PlayerBar, ZoomCanvas, evolution_figure, HINT
 from .experiments import ExperimentSelector
 
@@ -25,6 +26,20 @@ AUTO_LIMIT = 1.0
 AUTO_DELAY_MS = 450
 ZOOM_STEPS = (.85, 1., 1.15, 1.3, 1.5, 1.75, 2.)
 SUPERSCRIPT = str.maketrans('-0123456789', '⁻⁰¹²³⁴⁵⁶⁷⁸⁹')
+
+
+KOREAN_FONTS = ('Malgun Gothic', 'AppleGothic', 'NanumGothic', 'Noto Sans CJK KR', 'Noto Sans KR')
+
+
+def use_korean_fallback_font():
+    """그래프 글꼴은 DejaVu Sans를 쓰고, 한글은 설치된 한글 글꼴로 대신 그립니다(글자 깨짐 방지)."""
+    import matplotlib
+    from matplotlib import font_manager
+    installed = {font.name for font in font_manager.fontManager.ttflist}
+    fallback = [name for name in KOREAN_FONTS if name in installed]
+    if fallback:
+        matplotlib.rcParams['font.family'] = ['DejaVu Sans', fallback[0]]
+    return fallback
 
 
 def format_number(value, digits=6):
@@ -111,6 +126,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f'공업수학 학습 스튜디오 {VERSION}')
         self.resize(1400, 900)
         self.states = {}
+        # 절마다 사용자 지정 입력을 따로 기억합니다. 교재 예제를 골라도 지워지지 않습니다.
+        self.custom_states = {}
+        self.custom_mode = False
         self.state_key = None
         self.topic = None
         self.form = None
@@ -120,6 +138,7 @@ class MainWindow(QMainWindow):
         self.job.completed.connect(self.present)
         self.job.failed.connect(self.show_error)
         # 글자 배율과 자동 계산 선택을 기억합니다. 테스트는 임시 파일을 넘깁니다.
+        use_korean_fallback_font()
         self.settings = settings if settings is not None else QSettings('EngineeringMathStudio', 'studio')
         self.durations = {}
         self.started = None
@@ -167,6 +186,14 @@ class MainWindow(QMainWindow):
         self.auto.setChecked(self.settings.value('auto', 'true') in (True, 'true'))
         self.auto.toggled.connect(lambda checked: self.settings.setValue('auto', checked))
         layout.addWidget(self.auto)
+        self.ghost = QCheckBox('이전 결과 겹쳐 보기')
+        self.ghost.setToolTip('같은 구성을 다시 계산하면 바로 전 결과의 곡선을 흐린 파선으로 함께 그립니다. '
+                              '범례에 바뀐 입력값이 표시됩니다.')
+        self.ghost.setChecked(self.settings.value('ghost', 'true') in (True, 'true'))
+        self.ghost.toggled.connect(self.toggle_ghost)
+        layout.addWidget(self.ghost)
+        self.previous = None
+        self.latest = None
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.hide()
@@ -196,6 +223,7 @@ class MainWindow(QMainWindow):
         splitter.setSizes([430, 970])
         self.selector.currentIndexChanged.connect(self.change_topic)
         self.selector.exampleChosen.connect(self.apply_example)
+        self.selector.customChosen.connect(self.open_custom)
         calculate.clicked.connect(self.calculate)
         cancel.clicked.connect(self.cancel)
         reset.clicked.connect(lambda: self.form.set_values({}))
@@ -233,6 +261,7 @@ class MainWindow(QMainWindow):
 
     def change_topic(self, *_):
         self.cancel()
+        self.custom_mode = False
         if self.topic is not None:
             self.states[self.state_key] = self.form.values()
         self.state_key = self.selector.currentIndex()
@@ -257,12 +286,31 @@ class MainWindow(QMainWindow):
         self.form.set_values(values)
         self.form.changed.connect(self.update_input_state)
         self.form.changed.connect(self.schedule_auto)
+        self.form.changed.connect(self.remember_custom)
         self.scroll.setWidget(self.form)
 
     def apply_example(self, name):
         """예제를 입력에 채우고 바로 계산합니다."""
+        self.custom_mode = False
         self.form.set_values(self.topic.examples[name])
         self.calculate()
+
+    def open_custom(self):
+        """사용자 지정: 이 절에서 마지막으로 직접 입력한 값(처음에는 기본값)을 불러와 편집합니다."""
+        self.custom_mode = True
+        self.form.set_values(self.custom_states.get(self.state_key, {}))
+        self.auto_timer.stop()
+        first = next((widget for spec, widget in zip(self.topic.inputs, self.form.fields.values())
+                      if spec.kind == 'text' and not self.form.rows[spec.key].isHidden()), None)
+        if first is not None:
+            first.setFocus()
+            first.selectAll()
+        self.statusBar().showMessage('사용자 지정: 함수와 매개변수를 직접 입력한 뒤 계산하기(Ctrl+Enter)를 누르십시오. '
+                                     '자동 계산이 켜져 있으면 입력을 멈출 때 계산합니다.')
+
+    def remember_custom(self):
+        if self.custom_mode:
+            self.custom_states[self.state_key] = self.form.values()
 
     def schedule_auto(self):
         if self.auto.isChecked() and self.durations.get(self.state_key, 0.) <= AUTO_LIMIT:
@@ -334,10 +382,20 @@ class MainWindow(QMainWindow):
         self.progress.hide()
         self.statusBar().showMessage('계산이 중지되었습니다.')
 
-    def present(self, result):
+    def toggle_ghost(self, checked):
+        self.settings.setValue('ghost', checked)
+        if self.result is not None:
+            self.present(self.result, refresh=True)
+
+    def present(self, result, refresh=False):
+        """refresh=True는 같은 결과를 다시 그릴 때(글자 크기, 겹쳐 보기 전환)이며 비교 대상을 바꾸지 않습니다."""
         self.progress.hide()
         if result.topic != self.topic.id:
             return
+        key = (result.topic, self.state_key)
+        if not refresh:
+            # 바로 전에 그린 같은 구성의 결과가 다음 비교 대상입니다.
+            self.previous = self.latest if self.latest is not None and self.latest[0] == key                 and self.latest[1] != result.params else None
         auto, self.auto_job = self.auto_job, False
         # 같은 구성을 다시 계산하면 보던 탭(그래프·표)에 그대로 머뭅니다.
         previous = self.result is not None and self.result.topic == result.topic
@@ -347,6 +405,11 @@ class MainWindow(QMainWindow):
             self.clear_output()
             blocker = QSignalBlocker(self.tabs)
             figures = self.topic.figures(result)
+            if not refresh:
+                self.latest = (key, result.params, snapshot(figures))
+            self.ghost_count = 0
+            if self.ghost.isChecked() and self.previous is not None:
+                self.ghost_count = overlay(figures, self.previous[2], describe(self.previous[1], result.params, self.topic.inputs))
             for name, figure in figures.items():
                 page = QWidget()
                 page.pending_figure = figure
@@ -504,7 +567,7 @@ class MainWindow(QMainWindow):
             self.form.details.setChecked(details)
             self.auto_timer.stop()
         if redraw and self.result is not None:
-            self.present(self.result)
+            self.present(self.result, refresh=True)
 
     def save(self):
         path, _ = QFileDialog.getSaveFileName(self, '설정 저장', '', 'JSON (*.json)')

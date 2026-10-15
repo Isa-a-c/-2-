@@ -267,10 +267,20 @@ def test_pde_classification_rejects_zero_principal_part():
         get_topic('pde_classification').compute({'A': '0', 'B': '0', 'C': '0'})
 
 
-@pytest.mark.parametrize('name', [name for name in get_topic('pde_basics').examples if name.startswith('연습문제')])
+ODE_MODE = '상미분방정식처럼 풀기'
+SOLVE_LIKE_ODE_EXERCISES = {
+    '연습문제 17: u_xx + 16π²u = 0': {'mode': ODE_MODE, 'c': '16*pi^2'},
+    '연습문제 19: u_y + y²u = 0': {'mode': ODE_MODE, 'variable': 'y', 'a': '0', 'b': '1', 'c': 'y^2'},
+    '연습문제 21: u_yy + 6u_y + 13u = 4e^(3y)': {'mode': ODE_MODE, 'variable': 'y', 'b': '6', 'c': '13', 'g': '4*exp(3*y)'},
+    '연습문제 22: u_xy = u_x': {'mode': ODE_MODE, 'variable': 'y', 'substitution': 'p = u_x로 치환', 'a': '0', 'b': '1', 'c': '-1'},
+    '연습문제 23: x²u_xx + 2xu_x − 2u = 0': {'mode': ODE_MODE, 'a': 'x^2', 'b': '2*x', 'c': '-2'},
+}
+
+
+@pytest.mark.parametrize('name', list(SOLVE_LIKE_ODE_EXERCISES))
 def test_solve_like_ode_examples_have_zero_residual(name):
-    topic = get_topic('pde_basics')
-    result = topic.compute(topic.examples[name])
+    """12.1 연습문제(화면 예시에서는 지웠지만 풀이 검산은 유지합니다)."""
+    result = get_topic('pde_basics').compute(SOLVE_LIKE_ODE_EXERCISES[name])
     assert dict(result.tables['풀이'][1])['대입 검산 잔차'] == '0'
 
 

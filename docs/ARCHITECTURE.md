@@ -35,6 +35,14 @@ AFTER: 실험군 → 문제 → 지원 구성으로 선택하고 교재 바로�
 - 테스트는 주제 목록의 위치가 아니라 교재 절 번호(`lesson`)로 주제를 고릅니다.
 
 
+## v1.10.0 사용자 지정·이전 결과·휠
+
+- 주제 모듈의 자체 예시(`examples`)를 모두 비웠습니다. 화면의 예제는 `topics/textbook.py`의 교재 본문 예제 50개뿐입니다. 12.1 연습문제의 풀이 검산은 `tests/test_chapter12.py`로 옮겨 유지합니다.
+- 각 절의 마지막 '사용자 지정' 항목은 `customChosen`을 보내고, `MainWindow.open_custom`이 그 절에서 마지막으로 직접 입력한 값(`custom_states`, 처음은 기본값)을 불러와 첫 수식 칸에 초점을 둡니다. 사용자 지정 상태에서 바뀐 입력만 `custom_states`에 기록하므로 교재 예제를 골라도 지워지지 않습니다.
+- `ui/ghost.py`: 그래프를 만든 직후 실선 데이터를 `snapshot`으로 저장하고, 같은 주제·구성의 다음 결과에 `overlay`로 흐린 파선을 겹칩니다. 범례에는 바뀐 입력을 `Previous (N=2)`처럼 적습니다. 파선이므로 재생 막대는 이 선을 움직이지 않습니다. 글자 확대·겹쳐 보기 전환은 `present(refresh=True)`로 다시 그려 비교 대상을 바꾸지 않습니다.
+- `ui/forms.py`의 `SpinBox`·`DoubleSpinBox`·`ComboBox`·`Slider`는 초점이 없을 때 휠 이벤트를 무시해 부모 스크롤 영역으로 넘깁니다(`StrongFocus`).
+- 그래프 글꼴은 DejaVu Sans에 설치된 한글 글꼴(Windows는 맑은 고딕)을 대체 글꼴로 더해 한글이 깨지지 않습니다.
+
 ## v1.9.3 목차 정리
 
 - `ExperimentSelector.ensure_examples`는 이름이 '교재 '로 시작하는 예제를 절 바로 아래에, 나머지는 '사용자 지정' 묶음 아래에 둡니다. `example_names`·`choose_example`·검색은 묶음 안까지 찾습니다.

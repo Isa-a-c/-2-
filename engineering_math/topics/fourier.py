@@ -40,9 +40,7 @@ class FourierTopic:
         InputSpec('frequency', '실험 주파수 (Hz)', 'float', 9., 0, 10000, visible_in=(MODES[4],)),
         InputSpec('rate', '샘플링 주파수 (Hz)', 'float', 12., .001, 10000, visible_in=(MODES[4],)),
     )
-    examples = {'기함수 x': {'function': 'x'}, '우함수 x²': {'function': 'x**2'},
-                '상수 함수': {'function': '3'}, '사인 함수': {'function': 'sin(x)'},
-                '매개변수 조합': {'function': 'A*exp(-x^2)*cos(w*x)', 'parameters': 'A=2; w=3'}}
+    examples = {}
 
     def __init__(self):
         self.session = FourierSession()

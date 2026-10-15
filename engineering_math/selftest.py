@@ -49,6 +49,10 @@ def run(application, window, report_path):
     window.job.failed.disconnect()
     window.job.failed.connect(errors.append)
     try:
+        # 수동 계산 흐름을 검사하므로 자동 재계산은 끕니다. 신호를 막아 사용자 설정에는 저장하지 않습니다.
+        from PySide6.QtCore import QSignalBlocker
+        with QSignalBlocker(window.auto):
+            window.auto.setChecked(False)
         window.show()
         application.processEvents()
         # 실제 Qt 이벤트 루프를 펌프하며 별도 계산 프로세스의 완료를 기다립니다.

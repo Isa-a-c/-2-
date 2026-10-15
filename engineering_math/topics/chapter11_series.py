@@ -58,8 +58,7 @@ class HalfRangeTopic(StaticTopic):
     inputs = FUNCTION_INPUTS + SERIES_INPUTS + (
         InputSpec('mode', '확장 방식', 'choice', '사인 · 홀수 확장', choices=('사인 · 홀수 확장', '코사인 · 짝수 확장')),
     )
-    examples = {'x의 사인 전개': {}, 'x의 코사인 전개': {'mode': '코사인 · 짝수 확장'},
-                '상수의 사인 전개': {'function': '1'}, '포물선': {'function': 'x*(pi-x)'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -108,9 +107,7 @@ class ForcedTopic(StaticTopic):
         InputSpec('v0', '초기 속도', 'float', 0., -100, 100),
         InputSpec('end_time', '마지막 시간', 'float', 20., .1, 100),
     )
-    examples = {'사각파 외력': {'function': 'sign(sin(x))'},
-                '무감쇠 공진': {'function': 'sin(x)', 'stiffness': 1., 'damping': 0.},
-                '감쇠 공진': {'function': 'sin(x)', 'stiffness': 1., 'damping': .2}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -184,7 +181,7 @@ class ApproximationTopic(StaticTopic):
     inputs = FUNCTION_INPUTS + SERIES_INPUTS + (
         InputSpec('perturbation', 'a₁에 더할 값 δ', 'float', .5, -10, 10),
     )
-    examples = {'x의 최소제곱 근사': {}, '절댓값': {'function': 'abs(x)'}, '사각파': {'function': 'sign(x)'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -217,7 +214,7 @@ class OrthogonalTopic(StaticTopic):
         InputSpec('mode', '직교기저', 'choice', 'Legendre', choices=('Legendre', 'Bessel')),
         InputSpec('nu', 'Bessel 차수 ν', 'int', 0, 0, 5, visible_in=('Bessel',)),
     )
-    examples = {'Bessel 상수': {'function': '1', 'mode': 'Bessel', 'L': '1'}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
@@ -274,10 +271,7 @@ class SturmTopic(OrthogonalTopic):
         InputSpec('l1', 'l₁ (l₁y(L)+l₂y′(L)=0)', 'float', 1., -100, 100, visible_in=('Robin',)),
         InputSpec('l2', 'l₂', 'float', 1., -100, 100, visible_in=('Robin',)),
     )
-    examples = {'양 끝 기울기 0 NN': {'mode': 'NN', 'function': '1'},
-                '혼합 경계 DN': {'mode': 'DN'}, '고유값 이동': {'q': 2.},
-                'Robin: y(0)=0, y(L)+y′(L)=0': {'mode': 'Robin'},
-                'Robin: 음의 고유값이 생기는 경우': {'mode': 'Robin', 'k1': 1., 'k2': 1., 'l1': 1., 'l2': 0.}}
+    examples = {}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
