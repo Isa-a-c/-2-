@@ -13,6 +13,8 @@ class Experiment:
     configuration: str
     method: str
     defaults: dict = field(default_factory=dict)
+    # True이면 화면 목차에서 숨깁니다. 계산·테스트·예전 설정 불러오기는 그대로 지원합니다.
+    hidden: bool = False
 
 
 GROUPS = ('함수 전개·근사', '고유값·고유함수', '적분변환·표본화', '진동·ODE', 'PDE·공간 분포', '수식·해 검산')
@@ -28,7 +30,8 @@ EXPERIMENTS = (
     Experiment('sine_cosine_transform', 'chapter11_transforms', 'SineCosineTopic', '11.8 · 사인·코사인 변환', TRANSFORM, 'Fourier 변환', '양의 반축 · 사인/코사인', '유한 구간 수치 구적'),
     Experiment('continuous_fourier', 'chapter11_transforms', 'ContinuousTransformTopic', '11.9 · 연속 변환·FFT', TRANSFORM, 'Fourier 변환', '복소 스펙트럼 · FFT 비교', '수치 구적과 FFT 비교'),
     Experiment('dft', 'chapter11_transforms', 'DiscreteFourierTopic', '11.9 · DFT·FFT', TRANSFORM, '이산 Fourier 변환', '데이터 벡터 · Fourier 행렬', 'F_N 행렬 곱과 짝·홀 분해'),
-    Experiment('transform_table', 'chapter11_transforms', 'TransformTableTopic', '11.10 · 변환공식 표', TRANSFORM, 'Fourier 변환', '표 I~III 34개 공식 · 수치 검산', '공식과 수치 구적 비교'),
+    Experiment('transform_table', 'chapter11_transforms', 'TransformTableTopic', '11.10 · 변환공식 표', TRANSFORM, 'Fourier 변환', '표 I~III 34개 공식 · 수치 검산', '공식과 수치 구적 비교',
+               hidden=True),
     Experiment('pde_basics', 'chapter12', 'PdeBasicsTopic', '12.1 · PDE 해 검산', VERIFY, 'PDE 후보 해', '기호 미분 · 표본 잔차', '후보 함수의 방정식 잔차'),
     Experiment('wave', 'wave', 'WaveTopic', '12.2–12.3 · 고정단 현', PDE, '파동', '유한 현 · 양 끝 고정', '사인 모드의 시간 진화'),
     Experiment('dalembert', 'chapter12', 'DalembertTopic', '12.4 · D’Alembert', PDE, '파동', '무한 현 · 초기값', 'D’Alembert 공식과 수치 구적'),

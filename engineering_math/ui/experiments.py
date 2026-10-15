@@ -61,6 +61,7 @@ class ExperimentSelector(QWidget):
             # 펼침 화살표가 보이도록 자리표시 자식을 둡니다.
             QTreeWidgetItem(item, ['…']).setFlags(Qt.ItemFlag.NoItemFlags)
             self.entries.append(item)
+            item.setHidden(entry.hidden)
         self.loaded = set()
         self.tree.expandToDepth(0)
         self.tree.itemExpanded.connect(self.on_expanded)
@@ -185,7 +186,7 @@ class ExperimentSelector(QWidget):
                 hit = own or text in child.text(0).lower()
                 child.setHidden(not hit)
                 matches += hit
-            item.setHidden(not (own or matches))
+            item.setHidden(entry.hidden or not (own or matches))
             if text and matches and not own:
                 item.setExpanded(True)
         for i in range(self.tree.topLevelItemCount()):

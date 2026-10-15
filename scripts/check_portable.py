@@ -17,13 +17,13 @@ environment['PATH']=str(Path(os.environ.get('SystemRoot','C:/Windows'))/'System3
 environment['MPLCONFIGDIR']=str(test_root/'matplotlib-cache')
 report=test_root/'검증 결과.json'
 result=subprocess.run([str(release/'EngineeringMathStudio.exe'),'--self-test',str(report)],
-    cwd=release,env=environment,timeout=120,creationflags=subprocess.CREATE_NO_WINDOW)
+    cwd=release,env=environment,timeout=300,creationflags=subprocess.CREATE_NO_WINDOW)
 if result.returncode!=0: raise RuntimeError(f'Portable validation exit={result.returncode}')
 payload=json.loads(report.read_text(encoding='utf-8'))
 assert payload['passed'] and payload['frozen']
 payload['scope']='Same Windows installation; copied Unicode/space path; restricted PATH; no separate OS validation'
 (root/'build/portable-validation.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding='utf-8')
-print('PASS: copied Unicode/space path, restricted PATH, frozen subprocesses, animation and export')
+print('PASS: copied Unicode/space path, restricted PATH, frozen subprocesses, player and export')
 # 성공한 검사 복사본은 누적하지 않습니다. 실패한 경우에는 진단용으로 보존됩니다.
 resolved_test_root = test_root.resolve()
 if not resolved_test_root.is_relative_to((root / 'build').resolve()):

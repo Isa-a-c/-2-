@@ -58,7 +58,7 @@ def test_search_finds_textbook_example_number(window):
     shown = [item.child(i).text(0) for i in range(item.childCount()) if not item.child(i).isHidden()]
     assert shown and all('11.2-3' in name for name in shown)
     window.selector.search.clear()
-    assert all(not item.isHidden() for item in window.selector.entries)
+    assert all(item.isHidden() == entry.hidden for item, entry in zip(window.selector.entries, EXPERIMENTS))
 
 
 def test_choosing_example_calculates_immediately(window):
@@ -245,3 +245,20 @@ def test_previous_result_is_overlaid(window):
     window.selector.select('half_range')
     window.present(window.topic.compute({}))
     assert window.ghost_count == 0
+
+
+def test_hidden_section_stays_out_of_tree_but_still_loads(window, tmp_path):
+    from engineering_math.core.project import save_settings
+    index = next(i for i, entry in enumerate(EXPERIMENTS) if entry.topic == 'transform_table')
+    assert EXPERIMENTS[index].hidden and window.selector.entries[index].isHidden()
+    for text in ('11.10', '변환', ''):
+        window.selector.search.setText(text)
+        assert window.selector.entries[index].isHidden()
+    window.selector.search.clear()
+    assert sum(not item.isHidden() for item in window.selector.entries) == len(EXPERIMENTS)-1
+    # 예전에 저장한 11.10 설정 파일은 그대로 열립니다.
+    path = tmp_path/'table.json'
+    save_settings(path, 'transform_table', {})
+    window.calculate = lambda: None
+    window.load_path(path)
+    assert window.topic.id == 'transform_table'

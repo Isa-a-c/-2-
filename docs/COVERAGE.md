@@ -29,7 +29,7 @@ Kreyszig 『공업수학 10판 하』(Part C~F, 11~23장) 목차 기준입니다
 | 11.7 | Fourier 적분 | 42 | ✅ | `fourier_integral` · 예제 1 (2L→∞), 예제 2·3 |
 | 11.8 | Fourier 코사인·사인 변환 | 50 | ✅ | `sine_cosine_transform` · 예제 1~3, 정리 1 검산 |
 | 11.9 | Fourier 변환, 이산·고속 Fourier 변환 | 54 | ✅ | `continuous_fourier`, `dft` · 예제 1~5, 합성곱 정리 |
-| 11.10 | 변환공식의 표 | 66 | ✅ | `transform_table` · 표 I~III 34개 (III-4·II-12 보정) |
+| 11.10 | 변환공식의 표 | 66 | ✅ | `transform_table` · 표 I~III 34개 (III-4·II-12 보정). v1.10.1부터 화면 목차에서 숨김(계산·검산 테스트·예전 설정 불러오기는 유지) |
 
 ### 12장 편미분방정식 (73쪽)
 

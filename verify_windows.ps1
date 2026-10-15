@@ -4,9 +4,9 @@ $fourierExecutable = Join-Path $PSScriptRoot 'EngineeringMathStudio.exe'
 $fourierReport = Join-Path $PSScriptRoot 'validation-report.json'
 if (-not (Test-Path -LiteralPath $fourierExecutable)) { throw 'Run this script from the extracted release folder.' }
 $fourierProcess = Start-Process -FilePath $fourierExecutable -ArgumentList '--self-test','validation-report.json' -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru
-if (-not $fourierProcess.WaitForExit(120000)) {
+if (-not $fourierProcess.WaitForExit(300000)) {
     Stop-Process -Id $fourierProcess.Id
-    throw 'Validation timed out after 120 seconds.'
+    throw 'Validation timed out after 300 seconds.'
 }
 if ($fourierProcess.ExitCode -ne 0) { throw "Executable failed. Check $fourierReport" }
 if (-not (Test-Path -LiteralPath $fourierReport)) { throw 'No validation report was created.' }

@@ -18,14 +18,25 @@ if smoke.exists():
 shutil.copy2(root/'README.md',folder/'README.md')
 shutil.copy2(root/'verify_windows.ps1',folder/'verify_windows.ps1')
 shutil.copy2(root/'VALIDATION.md',folder/'VALIDATION.md')
-(folder/'실행 안내.txt').write_text(
-    f'공업수학 학습 스튜디오 v{VERSION}\n\nEngineeringMathStudio.exe를 더블클릭하십시오.\n'
-    'Python을 별도로 설치할 필요가 없습니다. _internal을 포함한 전체 폴더를 함께 보관하십시오.\n'
-    '주제: 교재 11장 Fourier 해석·12장 PDE, 질량–스프링–댐퍼 ODE, 라플라스 변환\n'
-    '학습 설명·계산 설정 탭과 열·파동 비교를 확인하십시오.\n'
-    '파일 메뉴: 설정 및 결과 CSV 묶음 저장\n'
-    '변화 과정 재생: 차수 또는 시간 애니메이션\n'
-    '현재 Windows x64 PC에서 실행 검사 완료. 다른 PC의 동작은 별도 확인이 필요합니다.\n',encoding='utf-8-sig')
+GUIDE = """공업수학 학습 스튜디오 v{version}
+
+EngineeringMathStudio.exe를 더블클릭하십시오.
+Python을 별도로 설치할 필요가 없습니다. _internal을 포함한 전체 폴더를 함께 보관하십시오.
+
+내용: Kreyszig 『공업수학 10판 하』 11장 Fourier 해석, 12장 편미분방정식 (교재 본문 예제 50개)
+
+사용법
+- 왼쪽 목차: 장 → 절 → 교재 예제. 예제를 누르면 바로 계산합니다. 위쪽 검색창으로 절·예제 번호를 찾습니다.
+- 각 절의 "사용자 지정": 함수와 매개변수를 직접 입력합니다. 길이 변수는 l입니다 (예: sin(pi*x/l)).
+- 값을 바꾸면 자동으로 다시 계산하고, 이전 결과를 흐린 파선으로 겹쳐 보여 줍니다.
+- 그래프 아래 재생 막대로 시간·차수에 따른 변화를 재생합니다. 변화 과정 탭에서는 현·막대·막의 움직임을 봅니다.
+- 그래프 위 Ctrl+휠 확대, Shift+휠 좌우 이동, 더블클릭 원래대로. 보기 메뉴에서 글자 크기 조절.
+- 파일 메뉴: 설정(JSON) 저장·불러오기, 결과 CSV 묶음 저장. 수치 표는 Ctrl+C로 전체 자릿수 복사.
+
+실행 검사: verify_windows.ps1을 PowerShell에서 실행하면 프로그램 자체 검사를 수행합니다.
+현재 Windows x64 PC에서 실행 검사 완료. 다른 PC의 동작은 별도 확인이 필요합니다.
+"""
+(folder/'실행 안내.txt').write_text(GUIDE.format(version=VERSION), encoding='utf-8-sig')
 license_folder=folder/'licenses'
 license_folder.mkdir(exist_ok=True)
 packages=['PySide6','PySide6_Essentials','PySide6_Addons','shiboken6','scipy','numpy','matplotlib','sympy','mpmath','pillow','packaging','kiwisolver','contourpy',
@@ -48,7 +59,8 @@ for name in ['LICENSE.txt','LICENSE']:
 archive_path=root/f'dist/EngineeringMathStudio-v{VERSION}-windows-x64.zip'
 with zipfile.ZipFile(archive_path,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
     for file in folder.rglob('*'):
-        if file.is_file() and file.name not in ('validation-report.json', 'validation-report.png', 'wave-small.png', 'ode-window.png', 'laplace-window.png', 'custom-force.png', 'chapter11-window.png', 'chapter12-window.png', 'rectangle_membrane-animation.png', 'disk_membrane-animation.png'):
+        # 자체 검사가 남긴 보고서·화면 캡처는 배포 ZIP에 넣지 않습니다.
+        if file.is_file() and not (file.suffix == '.png' or file.name == 'validation-report.json'):
             archive.write(file,file.relative_to(folder.parent))
 digest=hashlib.sha256(archive_path.read_bytes()).hexdigest()
 archive_path.with_suffix('.sha256').write_text(f'{digest}  {archive_path.name}\n',encoding='ascii')
