@@ -123,3 +123,15 @@ class FourierTopic:
         sums = calculate_fourier_sums(x, length, a0, an, bn, range(current+1))
         return dict(x=x, frames=np.array(list(sums.values())), labels=[f'N = {n}' for n in range(current+1)],
                     reference=y, xlabel='x', ylabel='Function value')
+
+    def series_for(self, name, result):
+        """재생 막대에서 차수 N이 커지며 모양이 바뀌는 그래프의 데이터입니다(시간이 아니라 차수의 변화)."""
+        if name == '현재 부분합':
+            # 원함수 f(x)는 그대로 두고 부분합 S_N만 N=0, 1, 2, …로 바꿉니다.
+            return {**self.animation(result), 'keep': ('f(x)',), 'color': 'C0'}
+        if name == '오차':
+            data = self.animation(result)
+            # N=0(상수항만)의 오차는 너무 커서 세로 범위를 망치므로 N=1부터 보입니다.
+            errors = (data['reference'] - data['frames'])[1:]
+            return dict(x=data['x'], frames=errors, labels=data['labels'][1:], color='tab:red')
+        return None

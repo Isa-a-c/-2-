@@ -5,7 +5,9 @@
 - 시간별 함수 그래프: 주제의 전체 시간 데이터로 곡선 하나가 실제 시간에 따라 움직입니다(잔상 없음).
 - 이름이 t=…인 곡선 묶음(전체 데이터가 없는 경우): 현재 시각의 곡선만 보입니다.
 - 그 밖에 실선이 셋 이상인 축: 그린 순서대로 한 개씩 쌓입니다(차수별 곡선, 기저 함수).
-- 실선 한두 개, 표식 점, 줄기(stem), 막대: 왼쪽부터 그려 나갑니다(끝점에 움직이는 점 표시).
+- 칸마다 세로축 이름이 t=…인 그래프(진행파 분해): 시각별 칸이 차례로 나타납니다.
+- 가로축이 시간 t인 선 그래프(외력, 에너지): 시간 순서대로 그려 나갑니다(끝점에 움직이는 점 표시).
+  가로축이 x·ω·n인 그래프는 그려 나가는 재생이 시간 변화로 오해되므로 정지 그래프로 둡니다.
 - 세로축이 t인 시공간 히트맵: 시간선이 아래에서 위로 움직입니다.
 - 점선·파선은 기준선이므로 그대로 두고, x–y 평면의 색 지도·등고선은 정지 그래프입니다.
 
@@ -114,13 +116,17 @@ class _Sweep:
 
 
 class _LiveCurve:
-    """시간별 함수 그래프에서 스냅숏 곡선을 숨기고 전체 시간 데이터의 곡선 하나를 움직입니다."""
+    """스냅숏 곡선을 숨기고 전체 데이터(시간별 해, 차수별 부분합)의 곡선 하나를 움직입니다.
+
+    series['keep']에 적힌 이름의 곡선(예: 원함수 f(x))은 재생 중에도 그대로 둡니다.
+    """
 
     def __init__(self, axes, series):
-        self.snapshots = [line for line in axes.lines if _solid(line)]
+        keep = set(series.get('keep', ()))
+        self.snapshots = [line for line in axes.lines if _solid(line) and line.get_label() not in keep]
         self.frames_data = np.asarray(series['frames'])
         self.labels = series['labels']
-        self.line, = axes.plot(series['x'], self.frames_data[0], color='black', linewidth=2.2, zorder=6)
+        self.line, = axes.plot(series['x'], self.frames_data[0], color=series.get('color', 'black'), linewidth=2.2, zorder=6)
         self.line.set_label('_재생 점')
         self.line.set_visible(False)
         # 진동하는 해가 스냅숏 범위를 넘어도 잘리지 않도록 세로 범위를 넓힙니다.
@@ -173,6 +179,30 @@ class _TimeLine:
         return f't = {time:.4g}'
 
 
+class _Panels:
+    """세로축 이름이 t=…인 칸들(시각별 스냅숏)을 위에서부터 차례로 보입니다."""
+
+    def __init__(self, axes):
+        self.axes = axes
+
+    @property
+    def frames(self):
+        return len(self.axes)
+
+    def show(self, progress):
+        k = int(round(progress*(len(self.axes)-1)))
+        for i, axes in enumerate(self.axes):
+            for artist in (*axes.lines, *axes.collections, *axes.patches):
+                artist.set_visible(i <= k)
+        return self.axes[k].get_ylabel()
+
+
+def _time_axis(axes):
+    """가로축이 시간이면 True입니다. 그려 나가는 재생은 이런 축에서만 시간의 흐름을 뜻합니다."""
+    label = axes.get_xlabel().strip()
+    return label in TIME_LABELS or label.lower().startswith(('t ', 't(', 't [', 'time'))
+
+
 def _field_times(axes):
     """히트맵의 시간 좌표를 돌려줍니다. 시간축 히트맵이 아니면 None입니다."""
     if axes.get_ylabel().strip() not in TIME_LABELS:
@@ -204,6 +234,11 @@ class FigureAnimator:
         if custom is not None:
             self.frames = custom['frames']
             return
+        panels = _data_axes(figure)
+        if len(panels) >= 2 and all(TIME_LABEL.match(axes.get_ylabel()) for axes in panels):
+            self.parts.append(_Panels(panels))
+            self.frames = len(panels)
+            return
         for axes in _data_axes(figure):
             if series is not None and series.get('kind') != 'field' and any(_solid(line) for line in axes.lines):
                 self.parts.append(_LiveCurve(axes, series))
@@ -218,7 +253,7 @@ class FigureAnimator:
                 self.parts.append(_TimeLine(axes, times))
             elif len(solid) >= 3:
                 self.parts.append(_Sequence(solid))
-            elif solid or markers or stems or len(bars) > 2:
+            elif _time_axis(axes) and (solid or markers or stems or len(bars) > 2):
                 self.parts.append(_Sweep(axes, solid, markers, stems, bars if len(bars) > 2 else []))
         self.frames = max((part.frames for part in self.parts), default=1)
 

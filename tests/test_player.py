@@ -66,12 +66,20 @@ def test_classification_of_known_figures():
     assert [line.get_visible() for line in solid] == [True, False, False, False, False]
     from engineering_math.ui.player import _TimeLine
     assert isinstance(FigureAnimator(figures['시공간 히트맵']).parts[0], _TimeLine)
-    fourier = get_topic('fourier')
-    sweep = FigureAnimator(fourier.figures(fourier.compute({}))['현재 부분합'])
+    # 가로축이 시간 t인 에너지 그래프만 시간 순서대로 그려 나갑니다.
+    wave = get_topic('wave')
+    wave_figures = wave.figures(wave.compute({}))
+    sweep = FigureAnimator(wave_figures['에너지'])
     assert sweep.frames == SWEEP_FRAMES
     sweep.show(0)
     line = sweep.figure.axes[0].lines[0]
     assert len(line.get_xdata()) < 0.05*len(sweep.parts[0].lines[0][1])
+    # 가로축이 x·ω·n이면 그려 나가지 않고 정지 그래프입니다.
+    fourier = get_topic('fourier')
+    fourier_figures = fourier.figures(fourier.compute({}))
+    for name in ('현재 부분합', '오차', '계수 스펙트럼'):
+        assert FigureAnimator(fourier_figures[name]).frames == 1, name
+    assert FigureAnimator(wave_figures['모델링: 장력과 힘']).frames == 1
     plt.close('all')
 
 
@@ -243,7 +251,9 @@ def test_play_pause_stop_buttons_and_seek(app):
     from matplotlib.figure import Figure
     from engineering_math.ui.player import PlayerBar, ZoomCanvas
     figure = Figure()
-    figure.add_subplot().plot(np.linspace(0, 1, 50), np.linspace(0, 1, 50))
+    axes = figure.add_subplot()
+    axes.plot(np.linspace(0, 1, 50), np.linspace(0, 1, 50))
+    axes.set_xlabel('t')
     player = PlayerBar(FigureAnimator(figure), ZoomCanvas(figure))
     buttons = player.buttons
     assert player.seek == 6 and player.slider.pageStep() == 6
@@ -299,4 +309,38 @@ def test_time_snapshots_without_series_show_only_current():
     orders.show(2)
     lines = orders.parts[0].lines
     assert [line.get_visible() for line in lines] == [True, True, True, False, False]
+    plt.close('all')
+
+
+def test_travelling_wave_panels_appear_in_time_order():
+    import matplotlib.pyplot as plt
+    from engineering_math.ui.player import _Panels
+    wave = get_topic('wave')
+    figure = wave.figures(wave.compute({}))['진행파 분해']
+    animator = FigureAnimator(figure)
+    assert isinstance(animator.parts[0], _Panels) and animator.frames == 6
+    assert animator.show(1).endswith('t=0.2')
+    visible = [any(line.get_visible() for line in axes.lines) for axes in figure.axes]
+    assert visible == [True, True, False, False, False, False]
+    animator.show(5)
+    assert all(line.get_visible() for axes in figure.axes for line in axes.lines)
+    plt.close('all')
+
+
+def test_partial_sum_changes_shape_with_order():
+    import matplotlib.pyplot as plt
+    fourier = get_topic('fourier')
+    result = fourier.compute({'N': 6})
+    figures = fourier.figures(result)
+    series = fourier.series_for('현재 부분합', result)
+    animator = FigureAnimator(figures['현재 부분합'], series=series)
+    assert animator.frames == 7
+    original = next(line for line in figures['현재 부분합'].axes[0].lines if line.get_label() == 'f(x)')
+    assert animator.show(2).endswith('N = 2')
+    assert original.get_visible()
+    np.testing.assert_allclose(animator.parts[0].line.get_ydata(), series['frames'][2])
+    error = fourier.series_for('오차', result)
+    assert error['labels'][0] == 'N = 1'
+    np.testing.assert_allclose(error['frames'][-1], result.data['error'], atol=1e-12)
+    assert fourier.series_for('계수 스펙트럼', result) is None
     plt.close('all')

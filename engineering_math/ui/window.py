@@ -496,16 +496,23 @@ class MainWindow(QMainWindow):
         layout.addWidget(toolbar)
         layout.addWidget(canvas, 1)
         series = None
-        if custom is None and self.result is not None and self.tabs.tabText(index).startswith('시간별')                 and getattr(self.topic, 'supports_animation', True):
-            # 시간별 그래프는 몇 개의 스냅숏 대신 전체 시간 데이터로 곡선을 움직입니다.
+        if custom is None and self.result is not None:
+            # 시간별 그래프는 전체 시간 데이터로, 주제가 지정한 그래프(예: 부분합)는 차수별 데이터로 곡선을 움직입니다.
             try:
-                series = self.topic.animation(self.result)
+                series = self.series_for(self.tabs.tabText(index))
             except Exception:
                 series = None
         player = PlayerBar(FigureAnimator(figure, custom, series), canvas, page)
         layout.addWidget(player)
         page.player = player
         canvas.draw()
+
+    def series_for(self, name):
+        if hasattr(self.topic, 'series_for'):
+            return self.topic.series_for(name, self.result)
+        if name.startswith('시간별') and getattr(self.topic, 'supports_animation', True):
+            return self.topic.animation(self.result)
+        return None
 
     def show_error(self, message):
         self.progress.hide()
