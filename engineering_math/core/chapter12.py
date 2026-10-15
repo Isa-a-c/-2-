@@ -81,6 +81,46 @@ def infinite_heat(initial, x, time, alpha, points):
     return checked(frames)
 
 
+def fourier_heat(initial, x, time, alpha, points=2048):
+    """Fourier 변환 해 u(x,t) = (1/√2π)∫ f̂(w) exp(−αw²t) e^(iwx) dw (교재 12.7 예제 2, 식 14).
+
+    1) f̂(w) = (1/√2π)∫ f(v) e^(−iwv) dv를 도약점에서 나눈 Gauss–Legendre 구적으로 계산합니다.
+       적분 구간은 표시 구간 양쪽에 max(8·2√(αt_max), 표시 폭)만큼 넓힌 구간입니다.
+    2) f가 실수이므로 역변환은 (2/√2π)·Re∫₀^∞ f̂(w)exp(−αw²t)e^(iwx)dw이고, exp(−αw²t)가 e^(−36)이 되는
+       w까지 구간별 Gauss–Legendre로 적분합니다. t=0은 역변환 없이 초기값을 그대로 씁니다.
+    반환: (프레임, w 노드, |f̂(w)|, 구간 끝의 |f|/max|f|).
+    """
+    spread = 2 * np.sqrt(alpha * float(np.max(time)))
+    span = x[-1] - x[0]
+    margin = max(8 * spread, span)
+    lower, upper = x[0] - margin, x[-1] + margin
+    v, v_weights, _ = piecewise_gauss(initial, lower, upper, total=points)
+    values = checked(initial(v))
+    positive = time[time > 0]
+    frames = np.empty((len(time), len(x)))
+    if not len(positive):
+        frames[:] = initial(x)
+        return checked(frames), np.zeros(1), np.zeros(1), 0.
+    reach = min(np.sqrt(36 / (alpha * float(positive.min()))), 4000.)
+    # f̂(w)는 w 방향으로 대략 2π/(적분 구간 길이) 간격으로 변하므로 그 간격마다 16점을 둡니다.
+    pieces = int(min(1250, max(8, np.ceil(reach * (upper - lower) / (2 * np.pi)))))
+    base, base_weights = np.polynomial.legendre.leggauss(16)
+    edges = np.linspace(0, reach, pieces + 1)
+    half = (edges[1:] - edges[:-1]) / 2
+    w = (edges[:-1, None] + half[:, None] * (base + 1)).ravel()
+    w_weights = (half[:, None] * base_weights).ravel()
+    transform = np.exp(-1j * np.outer(w, v)) @ (v_weights * values) / np.sqrt(2 * np.pi)
+    waves = np.exp(1j * np.outer(w, x))
+    for i, t in enumerate(time):
+        if t == 0:
+            frames[i] = initial(x)
+        else:
+            frames[i] = 2 / np.sqrt(2 * np.pi) * np.real((w_weights * transform * np.exp(-alpha * w**2 * t)) @ waves)
+    edge = float(max(abs(initial(np.array([lower]))[0]), abs(initial(np.array([upper]))[0]))
+                 / max(float(np.max(np.abs(values))), 1e-300))
+    return checked(frames), w, np.abs(transform), edge
+
+
 # ── 공통 모드 시간 진화와 에너지 ─────────────────────────────────
 def modal_motion(time, omega, displacement, velocity, norms):
     phase = np.outer(time, omega)

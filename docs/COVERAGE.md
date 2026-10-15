@@ -21,11 +21,11 @@ Kreyszig 『공업수학 10판 하』(Part C~F, 11~23장) 목차 기준입니다
 | 절 | 제목 | 쪽 | 상태 | 주제 ID · 비고 |
 |---|---|---:|:---:|---|
 | 11.1 | Fourier 급수 | 4 | ✅ | `fourier` · 예제 1·2, Gibbs, DFT/aliasing |
-| 11.2 | 임의의 주기, 우함수·기함수, 반구간 전개 | 12 | ✅ | `fourier`, `half_range` · 예제 1~6 |
+| 11.2 | 임의의 주기, 우함수·기함수, 반구간 전개 | 12 | ✅ | `fourier`, `half_range` · 예제 1~6 (예제 4: 반파정류기의 우함수 부분 → 코사인 급수) |
 | 11.3 | 강제진동 | 22 | ✅ | `fourier_forced` · 예제 1의 응답 진폭 Cₙ |
 | 11.4 | 삼각함수 다항식에 의한 근사 | 25 | ✅ | `trig_approximation` · 예제 1의 E* 표 |
-| 11.5 | Sturm–Liouville 문제, 직교함수 | 29 | ✅ | `sturm_liouville` · DD/NN/DN/주기/Robin (상수계수) |
-| 11.6 | 직교급수, 일반화된 Fourier 급수 | 35 | ✅ | `orthogonal_series` · 예제 1~3 (Legendre, Bessel) |
+| 11.5 | Sturm–Liouville 문제, 직교함수 | 29 | ✅ | `sturm_liouville` · 예제 1~4 (예제 3은 예제 1과 같은 계산), DD/NN/DN/주기/Robin (상수계수) |
+| 11.6 | 직교급수, 일반화된 Fourier 급수 | 35 | ✅ | `orthogonal_series` · 예제 1~3 (Legendre, Bessel. 예제 2의 일반 이론은 예제 3 프리셋에 포함) |
 | 11.7 | Fourier 적분 | 42 | ✅ | `fourier_integral` · 예제 1 (2L→∞), 예제 2·3 |
 | 11.8 | Fourier 코사인·사인 변환 | 50 | ✅ | `sine_cosine_transform` · 예제 1~3, 정리 1 검산 |
 | 11.9 | Fourier 변환, 이산·고속 Fourier 변환 | 54 | ✅ | `continuous_fourier`, `dft` · 예제 1~5, 합성곱 정리 |
@@ -35,13 +35,13 @@ Kreyszig 『공업수학 10판 하』(Part C~F, 11~23장) 목차 기준입니다
 
 | 절 | 제목 | 쪽 | 상태 | 주제 ID · 비고 |
 |---|---|---:|:---:|---|
-| 12.1 | 기본개념 | 73 | ✅ | `pde_basics` · 해 검산, 예제 2·3 (ODE처럼 풀기) |
+| 12.1 | 기본개념 | 73 | ✅ | `pde_basics` · 해 검산(본문 식 (7)의 네 해, ln(x²+y²) 포함), 예제 2·3 (ODE처럼 풀기) |
 | 12.2 | 모델링: 진동하는 현, 파동방정식 | 76 | ✅ | `wave` · 장력과 힘의 균형 그림·표 |
 | 12.3 | 변수분리법, Fourier 급수의 사용 | 78 | ✅ | `wave` · 예제 1, 정규진동, 진행파 분해 |
 | 12.4 | 파동방정식의 D'Alembert 해, 특성 | 87 | ✅ | `dalembert`, `pde_classification` · 분류·특성·표준형 |
 | 12.5 | 모델링: 입체 내의 열전도, 열전도방정식 | 91 | ✅ | `heat` · 열흐름과 열 균형 그림·표 |
 | 12.6 | 열전도방정식: Fourier 급수에 의한 해 | 93 | ✅ | `heat`, `rectangle_laplace` · 예제 1~5, 직사각형 정상 상태 |
-| 12.7 | 긴 막대의 모델링, Fourier 적분·변환에 의한 해 | 102 | ✅ | `infinite_heat` · 예제 1~4 (반무한 막대 포함) |
+| 12.7 | 긴 막대의 모델링, Fourier 적분·변환에 의한 해 | 102 | ✅ | `infinite_heat` · 예제 1~4. 풀이 방법: 열핵 합성곱(예제 1·3) / Fourier 변환(예제 2), 반무한 막대(예제 4) |
 | 12.8 | 모델링: 박막, 2차원 파동방정식 | 109 | ✅ | `rectangle_membrane` |
 | 12.9 | 직사각형의 박막, 이중 Fourier 급수 | 111 | ✅ | `rectangle_membrane` · 예제 1 (중복 고유값·절선), 예제 2 |
 | 12.10 | 극좌표의 Laplace 연산자, 원형 박막, Fourier–Bessel 급수 | 119 | ✅ | `disk_membrane` · 예제 1, 정규진동과 절선 |

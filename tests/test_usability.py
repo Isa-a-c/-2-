@@ -262,3 +262,12 @@ def test_hidden_section_stays_out_of_tree_but_still_loads(window, tmp_path):
     window.calculate = lambda: None
     window.load_path(path)
     assert window.topic.id == 'transform_table'
+
+
+def test_search_finds_alias_example_numbers(window):
+    for number, label in [('12.7-3', '교재 예제 12.7-1·3'), ('11.5-3', '교재 예제 11.5-1·3'), ('11.9-5', '교재 예제 11.9-4·5')]:
+        window.selector.search.setText(number)
+        shown = [item.child(i).text(0) for item in window.selector.entries if not item.isHidden()
+                 for i in range(item.childCount()) if not item.child(i).isHidden()]
+        assert any(name.startswith(label) for name in shown), number
+    window.selector.search.clear()

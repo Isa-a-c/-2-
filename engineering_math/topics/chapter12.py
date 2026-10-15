@@ -7,7 +7,7 @@ from matplotlib.figure import Figure
 from engineering_math.core.models import InputSpec, Result, validate_params
 from engineering_math.core.expr import parameter_expression, evaluate, symbols_for
 from engineering_math.core.chapter11 import checked
-from engineering_math.core.chapter12 import (dalembert, infinite_heat, rectangle_membrane,
+from engineering_math.core.chapter12 import (dalembert, infinite_heat, fourier_heat, rectangle_membrane,
     disk_membrane, disk_potential, sphere_potential, rectangle_laplace)
 from engineering_math.core.pde import evolution_figures, evolution_animation
 
@@ -130,7 +130,8 @@ class PdeBasicsTopic:
         else:
             residual = sp.diff(u, t, 2) - sp.Rational(str(p['speed'])) ** 2 * sp.diff(u, x, 2)
         residual = sp.simplify(residual)
-        grid = np.linspace(-p['extent'], p['extent'], 81)
+        # 짝수 개 표본은 x=0, y=0을 지나지 않으므로 ln(x²+y²)처럼 원점이 특이점인 해도 검산할 수 있습니다.
+        grid = np.linspace(-p['extent'], p['extent'], 80)
         xx, yy = np.meshgrid(grid, grid, indexing='ij')
         values = evaluate(u, (xx, yy, p['time']), ('x', 'y', 't'))
         errors = evaluate(residual, (xx, yy, p['time']), ('x', 'y', 't'))
@@ -382,9 +383,13 @@ class DalembertTopic(EvolutionTopic):
 class InfiniteHeatTopic(EvolutionTopic):
     id = 'infinite_heat'
     title = '12.7 · 무한 막대와 열핵'
-    description = '무한 막대의 열핵 합성곱을 계산합니다. Fourier 변환 해 F(ω,t)=F(ω,0)exp(−αω²t)와 동등합니다.'
+    description = ('무한 막대의 열방정식을 열핵 합성곱(예제 1·3) 또는 Fourier 변환 F(ω,t)=F(ω,0)exp(−αω²t)(예제 2)로 '
+                   '계산합니다. 두 방법은 같은 해를 줍니다.')
     MODES = ('무한 막대', '반무한 막대 · u(0,t)=0')
+    METHODS = ('열핵 합성곱 (예제 1·3)', 'Fourier 변환 (예제 2)')
     inputs = (InputSpec('mode', '영역', 'choice', MODES[0], choices=MODES),
+              InputSpec('method', '풀이 방법', 'choice', METHODS[0], choices=METHODS, visible_in=(MODES[0],),
+                        help='Fourier 변환을 고르면 열핵 합성곱 결과와의 최대 차이도 함께 보여 줍니다.'),
               InputSpec('initial', '초기 온도 f(x)', 'text', 'exp(-x^2)'), PARAMETERS,
               InputSpec('alpha', '열확산계수 α', 'float', .2, .000001, 10),
               InputSpec('extent', '표시 반폭 X', 'float', 5., .1, 100),
@@ -406,8 +411,15 @@ class InfiniteHeatTopic(EvolutionTopic):
         else:
             source = f
             full = x = np.linspace(-p['extent'], p['extent'], p['num_points'])
+        transform = not semi and p['method'] == self.METHODS[1]
         frames = infinite_heat(source, full, time, p['alpha'], p['quadrature_points'])
-        refined = infinite_heat(source, full, time[-1:], p['alpha'], 2 * p['quadrature_points'] - 1)[0]
+        if transform:
+            # 열핵 결과는 비교 기준으로만 쓰므로 격자 세분화 확인은 생략합니다.
+            kernel = frames
+            frames, w, magnitude, edge = fourier_heat(source, full, time, p['alpha'])
+            refined = frames[-1]
+        else:
+            refined = infinite_heat(source, full, time[-1:], p['alpha'], 2 * p['quadrature_points'] - 1)[0]
         if semi:
             frames, refined = frames[:, len(full) - len(x):], refined[len(full) - len(x):]
             frames[1:, 0] = 0.
@@ -417,12 +429,48 @@ class InfiniteHeatTopic(EvolutionTopic):
         if semi:
             notices[1] = ('반무한 막대 x≥0, u(0,t)=0: Fourier 사인 변환 해 u=(2/π)∫∫f(p)sin(wp)e^(−αw²t)sin(wx)dpdw (교재 식 20)는 '
                           '초기값을 기함수로 확장한 무한 막대의 해와 같습니다. 오른쪽 표시 끝은 경계가 아닙니다.')
-        result = evolution_result(self.id, p, x, time, frames, f(x), notices,
-            {'격자 세분화 최종 최대 차이': float(np.max(np.abs(frames[-1] - refined)))})
+        metrics = {'격자 세분화 최종 최대 차이': float(np.max(np.abs(frames[-1] - refined)))}
+        if transform:
+            # t=0은 두 방법 모두 초기값 그대로이므로 t>0에서 비교합니다.
+            metrics = {'열핵 합성곱과 최대 차이 (t>0)': float(np.max(np.abs(frames[1:] - kernel[1:]))) if len(time) > 1 else 0.}
+            notices[0] = ('Fourier 변환 해 (교재 12.7 예제 2): x에 대해 변환하면 û_t=−αw²û이므로 û(w,t)=f̂(w)exp(−αw²t)이고, '
+                          '역변환하면 해를 얻습니다. f̂(w)와 역변환 적분을 모두 Gauss–Legendre 구적으로 계산하고 열핵 합성곱 결과와 비교합니다.')
+            notices[2] = '변환 영역 탭: 고주파 성분 exp(−αw²t)가 먼저 사라지는 것이 열이 퍼지며 모양이 매끄러워지는 이유입니다.'
+            if edge > 1e-6:
+                notices.append(f'적분 구간 끝의 f가 최댓값의 {edge:.2g}배입니다. f̂(w)가 잘린 구간으로 계산되었으니 실수축에서 빨리 줄어드는 초기값을 쓰십시오.')
+        result = evolution_result(self.id, p, x, time, frames, f(x), notices, metrics)
+        if transform:
+            keep = (w <= 40 / max(1., np.sqrt(p['alpha']))) & (np.arange(len(w)) < 4000)
+            result.data['spectrum'] = (w[keep], magnitude[keep])
         mass = np.trapezoid(frames, x=x, axis=1)
         checked(mass)
         result.tables['표시 구간 내 적분'] = (['t', 'integral over displayed interval'], np.column_stack((time, mass)))
         return result
+
+    def figures(self, result):
+        figures = super().figures(result)
+        if 'spectrum' in result.data:
+            figures['변환 영역 |F(ω,t)|'] = self.spectrum_figure(result)
+        return figures
+
+    @staticmethod
+    def spectrum_figure(result):
+        """|f̂(w)|exp(−αw²t)를 몇 시각에 그립니다. 높은 주파수부터 사라집니다."""
+        w, magnitude = result.data['spectrum']
+        time = result.data['time']
+        figure = Figure(figsize=(8, 4.5), layout='constrained')
+        axes = figure.add_subplot()
+        # 감쇠가 빠른 초기를 보이도록 t=0과 로그 간격의 네 시각을 고릅니다.
+        chosen = [0.] + list(np.geomspace(time[1], time[-1], 4)) if len(time) > 2 and time[1] > 0 else list(time[:5])
+        for t in sorted({float(time[np.argmin(np.abs(time - c))]) for c in chosen}):
+            axes.plot(w, magnitude * np.exp(-result.params['alpha'] * w**2 * t), label=f't={t:.3g}')
+        top = float(np.max(magnitude)) or 1.
+        visible = w[magnitude > 1e-3 * top]
+        axes.set(xlim=(0, float(visible[-1]) if len(visible) else float(w[-1])), xlabel='ω',
+                 ylabel='|F(ω,t)| = |f̂(ω)| exp(−αω²t)', title='Fourier transform of u(x,t) (Example 2)')
+        axes.grid(alpha=.3)
+        axes.legend()
+        return figure
 
 
 # ── 12.8~12.11의 공통 2차원 그림 ──────────────────────────────────

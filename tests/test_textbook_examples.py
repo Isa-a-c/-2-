@@ -68,6 +68,16 @@ def test_11_2_3_half_wave_rectifier():
     np.testing.assert_allclose(d['an'][[0, 2, 4]], 0, atol=1e-7)
 
 
+def test_11_2_4_even_part_has_only_cosine_terms():
+    """u − E/π − ½E sin ωt = ½E|sin ωt| − E/π는 우함수이므로 b_n=0이고 a_n은 예제 3과 같습니다(17쪽)."""
+    result = run('11.2-4')
+    d = result.data
+    assert result.metrics['a₀'] == pytest.approx(0, abs=1e-7)
+    np.testing.assert_allclose(d['bn'], 0, atol=1e-7)
+    np.testing.assert_allclose(d['an'][[1, 3, 5]], [-2/(1*3*PI), -2/(3*5*PI), -2/(5*7*PI)], atol=1e-7)
+    np.testing.assert_allclose(d['an'][[0, 2, 4]], 0, atol=1e-7)
+
+
 def test_11_2_5_sawtooth():
     result = run('11.2-5')
     assert result.metrics['a₀'] == pytest.approx(PI, abs=1e-6)
@@ -320,6 +330,34 @@ def test_12_7_1_infinite_bar_erf_solution():
     t = d['time'][1:, None]
     exact = 50*(erf((1-d['x'])/(2*np.sqrt(t))) + erf((1+d['x'])/(2*np.sqrt(t))))
     np.testing.assert_allclose(d['frames'][1:], exact, atol=1e-9)
+
+
+def test_12_7_2_fourier_transform_method_matches_example_1():
+    """예제 2는 예제 1을 Fourier 변환으로 풉니다. 같은 erf 해와 열핵 결과를 얻어야 합니다(106쪽)."""
+    result = run('12.7-2')
+    d = result.data
+    t = d['time'][1:, None]
+    exact = 50*(erf((1-d['x'])/(2*np.sqrt(t))) + erf((1+d['x'])/(2*np.sqrt(t))))
+    np.testing.assert_allclose(d['frames'][1:], exact, atol=1e-9)
+    assert result.metrics['열핵 합성곱과 최대 차이 (t>0)'] < 1e-9
+    w, magnitude = d['spectrum']
+    # 사각 펄스 U0(|x|<1)의 변환은 √(2/π)·U0·sin w / w입니다(11.9 예제 1).
+    np.testing.assert_allclose(magnitude, np.abs(np.sqrt(2/PI)*100*np.sinc(w/PI)), atol=1e-8)
+
+
+def test_12_1_logarithm_solves_laplace_away_from_origin():
+    result = run('12.1', 'ln')
+    assert result.metrics['표본 잔차 최대값'] < 1e-10
+    assert dict(result.tables['기호 검산'][1])['잔차'] == '0'
+    assert not np.any(result.data['x'] == 0)
+
+
+def test_aliases_label_and_search_keys():
+    example = next(item for item in EXAMPLES if item.key == '12.7-1')
+    assert example.label.startswith('교재 예제 12.7-1·3 · ')
+    assert example.keys == ('12.7-1', '12.7-3') and '12.7-3' in example.search_text
+    for key, also in [('11.5-1', '11.5-3'), ('11.6-3', '11.6-2'), ('11.9-4', '11.9-5')]:
+        assert also in next(item for item in EXAMPLES if item.key == key).keys
 
 
 def test_12_7_4_semi_infinite_bar_sine_transform():

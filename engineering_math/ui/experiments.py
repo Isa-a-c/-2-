@@ -12,6 +12,9 @@ from engineering_math.topics.textbook import EXAMPLES as TEXTBOOK
 
 CHAPTERS = (('11.', '11장 Fourier 해석'), ('12.', '12장 편미분방정식'))
 ROLE = Qt.ItemDataRole.UserRole
+# 예제 항목의 검색어(같은 계산의 다른 예제 번호 포함, 예: 12.7-1·3 → '12.7-3')
+SEARCH = Qt.ItemDataRole.UserRole + 1
+BY_LABEL = {example.label: example for example in TEXTBOOK}
 CUSTOM_GROUP = '사용자 지정'
 
 
@@ -111,6 +114,7 @@ class ExperimentSelector(QWidget):
         for name in entry_examples(EXPERIMENTS[index], get_topic(EXPERIMENTS[index].topic)):
             child = QTreeWidgetItem(item, [name])
             child.setData(0, ROLE, ('example', index, name))
+            child.setData(0, SEARCH, BY_LABEL[name].search_text if name in BY_LABEL else name.lower())
             child.setToolTip(0, name)
         custom = QTreeWidgetItem(item, [CUSTOM_GROUP])
         custom.setData(0, ROLE, ('custom', index))
@@ -176,14 +180,14 @@ class ExperimentSelector(QWidget):
         for index, item in enumerate(self.entries):
             entry = EXPERIMENTS[index]
             if text and index not in self.loaded and any(
-                    example.topic == entry.topic and text in example.label.lower() for example in TEXTBOOK):
+                    example.topic == entry.topic and text in example.search_text for example in TEXTBOOK):
                 self.ensure_examples(index)
             own = not text or any(text in value.lower() for value in
                                   (entry.lesson, entry.problem, entry.configuration, entry.method))
             matches = 0
             for i in range(item.childCount()):
                 child = item.child(i)
-                hit = own or text in child.text(0).lower()
+                hit = own or text in (child.data(0, SEARCH) or child.text(0).lower())
                 child.setHidden(not hit)
                 matches += hit
             item.setHidden(entry.hidden or not (own or matches))

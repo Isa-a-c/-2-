@@ -35,6 +35,12 @@ AFTER: 실험군 → 문제 → 지원 구성으로 선택하고 교재 바로�
 - 테스트는 주제 목록의 위치가 아니라 교재 절 번호(`lesson`)로 주제를 고릅니다.
 
 
+## v1.11.0 교재 예제 보완
+
+- `TextbookExample.also`: 같은 계산을 다른 관점·방법으로 보이는 예제 번호입니다. 라벨은 `교재 예제 12.7-1·3`이고, `keys`·`search_text`로 목차 검색이 `12.7-3`도 찾습니다(트리 항목의 `SEARCH` 역할 데이터).
+- `core.chapter12.fourier_heat`: 12.7 예제 2의 Fourier 변환 풀이입니다. f̂(w)를 도약점에서 나눈 Gauss–Legendre 구적으로 구하고, 역변환 적분도 구간별 Gauss–Legendre로 계산합니다. `InfiniteHeatTopic`의 `method`가 'Fourier 변환'이면 이 결과를 쓰고, 열핵 합성곱과의 최대 차이와 변환 영역 그래프를 함께 보여 줍니다.
+- 12.1 해 검산 격자를 81점에서 80점으로 바꾸어 원점을 지나지 않습니다(ln(x²+y²) 검산).
+
 ## v1.10.1 숨긴 절
 
 - `catalog.Experiment.hidden`이 True인 구성은 목차 트리와 검색 결과에 나타나지 않습니다. 계산 모듈, `experiment_index`, 설정 불러오기, 테스트는 그대로입니다. 현재 11.10 변환공식 표(`transform_table`)만 숨깁니다.

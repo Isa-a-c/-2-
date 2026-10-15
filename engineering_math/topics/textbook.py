@@ -10,6 +10,9 @@
 from dataclasses import dataclass, field
 
 PULSE = 'Heaviside(x+1,1/2)-Heaviside(x-1,1/2)'
+# 12.7 예제 1~3의 공통 입력: 무한 막대의 사각 펄스 초기온도 U0=100, c²=1 (그림 299).
+BAR_12_7 = {'initial': f'U0*({PULSE})', 'parameters': 'U0=100', 'alpha': 1., 'extent': 3.,
+            'num_points': 241, 'end_time': 8., 'time_points': 65}
 
 
 @dataclass(frozen=True)
@@ -19,12 +22,25 @@ class TextbookExample:
     title: str
     topic: str
     params: dict = field(default_factory=dict)
+    # 같은 계산을 다른 관점·방법으로 보이는 예제 번호입니다. 예: 12.7-1의 also=('3',) → '12.7-1·3'.
+    also: tuple = ()
 
     @property
     def label(self):
         # '12.6'처럼 예제 번호가 없는 항목은 본문 설명의 대표 문제입니다.
         kind = '예제' if '-' in self.key else '본문'
-        return f'교재 {kind} {self.key} · {self.title} ({self.page}쪽)'
+        number = '·'.join((self.key, *self.also))
+        return f'교재 {kind} {number} · {self.title} ({self.page}쪽)'
+
+    @property
+    def keys(self):
+        """검색에 쓰는 모든 예제 번호(예: 12.7-1, 12.7-3)."""
+        section = self.key.split('-')[0]
+        return (self.key, *(f'{section}-{number}' for number in self.also))
+
+    @property
+    def search_text(self):
+        return ' '.join((self.label, *self.keys)).lower()
 
 
 EXAMPLES = (
@@ -41,6 +57,9 @@ EXAMPLES = (
     TextbookExample('11.2-3', 15, '반파정류기', 'fourier',
                     {'function': 'Heaviside(x,1/2)*E0*sin(w*x)', 'parameters': 'E0=1; w=1', 'L': 'pi',
                      'num_points': 20000, 'comparison_N': '1,2,4,10'}),
+    TextbookExample('11.2-4', 17, '코사인 급수: 반파정류기 u − E/π − ½E sin ωt는 우함수', 'fourier',
+                    {'function': 'Heaviside(x,1/2)*E0*sin(w*x) - E0/pi - E0*sin(w*x)/2', 'parameters': 'E0=1; w=1',
+                     'L': 'pi', 'num_points': 20000, 'comparison_N': '2,4,10'}),
     TextbookExample('11.2-5', 17, '톱니파', 'fourier',
                     {'function': 'x+pi', 'num_points': 20000, 'comparison_N': '1,2,3,20'}),
     TextbookExample('11.2-6', 19, '삼각형의 반구간 사인 전개', 'half_range',
@@ -54,15 +73,18 @@ EXAMPLES = (
                      'mass': 1., 'damping': .05, 'stiffness': 25., 'end_time': 20.}),
     TextbookExample('11.4-1', 28, '톱니파의 최소제곱오차 (N=20)', 'trig_approximation',
                     {'function': 'x+pi', 'N': 20, 'num_points': 20001, 'perturbation': 0.}),
-    TextbookExample('11.5-1', 30, '진동하는 현의 고유함수', 'sturm_liouville', {'function': 'x', 'N': 6}),
+    # 예제 3(33쪽)은 예제 1의 고유함수 sin mx가 [0, π]에서 직교함을 정리 1로 보이는 같은 계산입니다.
+    TextbookExample('11.5-1', 30, '진동하는 현의 고유함수와 직교성', 'sturm_liouville', {'function': 'x', 'N': 6},
+                    also=('3',)),
     TextbookExample('11.5-2', 31, '직교함수 sin mx와 노름 √π (구간 길이 2π)', 'sturm_liouville',
                     {'mode': 'Periodic', 'L': '2*pi', 'function': 'x', 'N': 7, 'num_points': 20001}),
     TextbookExample('11.5-4', 34, 'Legendre 다항식의 직교성', 'orthogonal_series',
                     {'function': 'x^2', 'N': 6, 'num_points': 20001}),
     TextbookExample('11.6-1', 36, 'sin πx의 Fourier–Legendre 급수', 'orthogonal_series',
                     {'function': 'sin(pi*x)', 'N': 12, 'num_points': 20001}),
+    # 예제 2(37쪽)는 Fourier–Bessel 급수의 일반 이론이고, 예제 3이 그 구체적인 계산입니다.
     TextbookExample('11.6-3', 38, '1−x²의 Fourier–Bessel 급수', 'orthogonal_series',
-                    {'function': '1-x^2', 'mode': 'Bessel', 'L': '1', 'N': 6, 'num_points': 20001}),
+                    {'function': '1-x^2', 'mode': 'Bessel', 'L': '1', 'N': 6, 'num_points': 20001}, also=('2',)),
     TextbookExample('11.7-1', 42, '사각파의 주기 2L→∞ (그림 280)', 'fourier_integral',
                     {'function': PULSE, 'mode': '주기 2L→∞ 스펙트럼', 'periods': '4, 8, 16', 'extent': 8.,
                      'cutoff': 12., 'num_points': 8001}),
@@ -88,7 +110,7 @@ EXAMPLES = (
     TextbookExample('11.9-3', 59, 'x e^(−x²)의 Fourier 변환', 'continuous_fourier',
                     {'function': 'x*exp(-x^2)'}),
     # 예제 4(DFT·Fourier 행렬)와 예제 5(FFT 짝·홀 분해)는 같은 데이터이며 한 화면에 함께 나옵니다.
-    TextbookExample('11.9-4', 62, 'DFT와 FFT의 짝·홀 분해 (예제 4·5, N=4)', 'dft', {'data': '0, 1, 4, 9'}),
+    TextbookExample('11.9-4', 62, 'DFT와 FFT의 짝·홀 분해 (N=4)', 'dft', {'data': '0, 1, 4, 9'}, also=('5',)),
     TextbookExample('11.9', 60, '합성곱 정리 (정리 4)', 'continuous_fourier',
                     {'mode': '합성곱 정리', 'function': 'exp(-x^2/2)', 'second': 'exp(-x^2/2)', 'extent': 12.,
                      'num_points': 4001}),
@@ -96,6 +118,8 @@ EXAMPLES = (
     TextbookExample('12.1-1', 74, 'Laplace 방정식의 해 x²−y²', 'pde_basics', {'candidate': 'x^2-y^2'}),
     TextbookExample('12.1-1', 74, 'Laplace 방정식의 해 eˣcos y', 'pde_basics', {'candidate': 'exp(x)*cos(y)'}),
     TextbookExample('12.1-1', 74, 'Laplace 방정식의 해 sin x cosh y', 'pde_basics', {'candidate': 'sin(x)*cosh(y)'}),
+    # 본문 식 (7)의 네 번째 해입니다. 원점은 특이점이므로 격자가 원점을 지나지 않습니다.
+    TextbookExample('12.1', 74, 'Laplace 방정식의 해 ln(x²+y²) (식 7)', 'pde_basics', {'candidate': 'log(x^2+y^2)'}),
     TextbookExample('12.1-2', 75, 'u_xx − u = 0을 상미분방정식처럼 풀기', 'pde_basics',
                     {'mode': '상미분방정식처럼 풀기', 'variable': 'x', 'a': '1', 'b': '0', 'c': '-1'}),
     TextbookExample('12.1-3', 75, 'u_xy = −u_x를 p=u_x로 치환하여 풀기', 'pde_basics',
@@ -123,9 +147,11 @@ EXAMPLES = (
                      'length': 3.141592653589793, 'alpha': 1., 'N': 50, 'num_points': 2001, 'end_time': 3.}),
     TextbookExample('12.6', 99, '직사각형의 Dirichlet 문제 (그림 296)', 'rectangle_laplace',
                     {'top': '25', 'length': 24., 'height': 24., 'N': 80, 'num_points': 121}),
-    TextbookExample('12.7-1', 104, '무한히 긴 막대의 온도', 'infinite_heat',
-                    {'initial': f'U0*({PULSE})', 'parameters': 'U0=100', 'alpha': 1., 'extent': 3.,
-                     'num_points': 241, 'end_time': 8., 'time_points': 65}),
+    # 예제 3(107쪽)은 예제 1을 합성곱(열핵)으로 푸는 것으로, 이 화면의 기본 계산 방법과 같습니다.
+    TextbookExample('12.7-1', 104, '무한히 긴 막대의 온도 (열핵 합성곱)', 'infinite_heat',
+                    BAR_12_7, also=('3',)),
+    TextbookExample('12.7-2', 106, '예제 1을 Fourier 변환으로 풀기', 'infinite_heat',
+                    {**BAR_12_7, 'method': 'Fourier 변환 (예제 2)'}),
     TextbookExample('12.7-4', 107, '반무한 막대의 Fourier 사인 변환 해 (그림 300)', 'infinite_heat',
                     {'mode': '반무한 막대 · u(0,t)=0', 'initial': 'Heaviside(1-x,1/2)', 'alpha': 1., 'extent': 2.,
                      'num_points': 201, 'end_time': 1.5, 'time_points': 151}),

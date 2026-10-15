@@ -41,7 +41,7 @@ EXPERIMENTS = (
     Experiment('heat', 'heat', 'HeatTopic', '12.6 · 단열 막대', PDE, '열전도', '유한 막대 · 양 끝 단열', '고유값 0을 포함하는 코사인 급수',
                {'mode': '양 끝 단열'}),
     Experiment('rectangle_laplace', 'chapter12', 'RectangleLaplaceTopic', '12.6 · 직사각형 정상 상태', PDE, '정상 상태 퍼텐셜', '직사각형 · 네 변 Dirichlet', 'sinh 급수의 중첩'),
-    Experiment('infinite_heat', 'chapter12', 'InfiniteHeatTopic', '12.7 · 무한 막대', PDE, '열전도', '무한 막대 · 초기값', '열핵 합성곱 (erf 가중치·도약 분리)', {'mode': '무한 막대'}),
+    Experiment('infinite_heat', 'chapter12', 'InfiniteHeatTopic', '12.7 · 무한 막대', PDE, '열전도', '무한 막대 · 초기값', '열핵 합성곱(erf 가중치·도약 분리) 또는 Fourier 변환', {'mode': '무한 막대'}),
     Experiment('infinite_heat', 'chapter12', 'InfiniteHeatTopic', '12.7 · 반무한 막대', PDE, '열전도', '반무한 막대 · u(0,t)=0', 'Fourier 사인 변환(기확장 열핵)', {'mode': '반무한 막대 · u(0,t)=0'}),
     Experiment('rectangle_membrane', 'chapter12', 'MembraneTopic', '12.8–12.9 · 직사각형 막', PDE, '파동', '직사각형 막 · 가장자리 고정', '이중 사인 모드'),
     Experiment('disk_membrane', 'chapter12', 'DiskMembraneTopic', '12.10 · 원형 막', PDE, '파동', '원형 막 · 원주 고정', 'Fourier–Bessel 모드'),
