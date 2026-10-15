@@ -46,14 +46,23 @@ def test_parameter_change_invalidates_fourier_cache():
 
 @pytest.mark.parametrize('topic', [HeatTopic(), WaveTopic()])
 def test_pde_parameters(topic):
-    result = topic.compute({'initial': 'A*sin(pi*x/ell)', 'parameters': 'A=2'})
+    result = topic.compute({'initial': 'A*sin(pi*x/l)', 'parameters': 'A=2'})
     np.testing.assert_allclose(result.data['initial'], 2*np.sin(np.pi*result.data['x']), atol=1e-14)
 
 
 def test_parameter_settings_roundtrip(tmp_path):
     from engineering_math.core.project import save_settings, load_settings, export_results
-    result = HeatTopic().compute({'initial': 'A*sin(pi*x/ell)', 'parameters': 'A=2', 'num_points': 201, 'time_points': 3})
+    result = HeatTopic().compute({'initial': 'A*sin(pi*x/l)', 'parameters': 'A=2', 'num_points': 201, 'time_points': 3})
     path = tmp_path/'parameters.json'
     save_settings(path, 'heat', result.params)
     assert load_settings(path)['params']['parameters'] == 'A=2'
     export_results(tmp_path/'parameters.zip', result)
+
+
+@pytest.mark.parametrize('topic', [HeatTopic(), WaveTopic()])
+def test_length_variable_is_l_and_old_ell_still_works(topic):
+    new = topic.compute({'initial': 'sin(pi*x/l)', 'length': 2.})
+    old = topic.compute({'initial': 'sin(pi*x/ell)', 'length': 2.})
+    np.testing.assert_allclose(new.data['initial'], np.sin(np.pi*new.data['x']/2), atol=1e-14)
+    np.testing.assert_array_equal(new.data['initial'], old.data['initial'])
+    assert 'ell' not in next(spec.label for spec in topic.inputs if spec.key == 'length')

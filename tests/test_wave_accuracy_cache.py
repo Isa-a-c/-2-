@@ -17,7 +17,7 @@ def test_wave_exact_displacement_mode():
 
 
 def test_wave_initial_velocity_nonunit_length_and_speed():
-    result = WaveTopic().compute({'initial': '0', 'velocity': '3*sin(2*pi*x/ell)', 'length': 2., 'speed': 4.})
+    result = WaveTopic().compute({'initial': '0', 'velocity': '3*sin(2*pi*x/l)', 'length': 2., 'speed': 4.})
     data = result.data
     omega = 4*np.pi
     exact = 3/omega*np.sin(omega*data['time'][:, None])*np.sin(np.pi*data['x'])
@@ -27,7 +27,7 @@ def test_wave_initial_velocity_nonunit_length_and_speed():
 
 
 def test_wave_multimode_energy_and_zero_solution():
-    result = WaveTopic().compute({'initial': 'sin(pi*x/ell)+0.5*sin(3*pi*x/ell)', 'velocity': '2*sin(2*pi*x/ell)'})
+    result = WaveTopic().compute({'initial': 'sin(pi*x/l)+0.5*sin(3*pi*x/l)', 'velocity': '2*sin(2*pi*x/l)'})
     energy = result.data['energy']
     np.testing.assert_allclose(energy, energy[0], rtol=2e-14)
     zero = WaveTopic().compute({'initial': '0'})
@@ -57,7 +57,7 @@ def test_wave_invalid_inputs(params):
 
 
 def test_heat_accuracy_isolates_grid_and_order_changes():
-    result = HeatTopic().compute({'initial': '1-abs(2*x/ell-1)', 'N': 5, 'num_points': 201})
+    result = HeatTopic().compute({'initial': '1-abs(2*x/l-1)', 'N': 5, 'num_points': 201})
     baseline, refined, higher = result.data['accuracy']['rows']
     assert baseline[1:3] == [201, 5]
     assert refined[1:3] == [401, 5]

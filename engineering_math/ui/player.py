@@ -2,7 +2,9 @@
 
 주제 코드를 고치지 않고 그래프에 이미 그려진 선을 조사해 재생 방식을 정합니다.
 
-- 실선이 셋 이상인 축: 그린 순서대로 한 개씩 나타납니다(시간별·차수별 곡선, 기저 함수).
+- 시간별 함수 그래프: 주제의 전체 시간 데이터로 곡선 하나가 실제 시간에 따라 움직입니다(잔상 없음).
+- 이름이 t=…인 곡선 묶음(전체 데이터가 없는 경우): 현재 시각의 곡선만 보입니다.
+- 그 밖에 실선이 셋 이상인 축: 그린 순서대로 한 개씩 쌓입니다(차수별 곡선, 기저 함수).
 - 실선 한두 개, 표식 점, 줄기(stem), 막대: 왼쪽부터 그려 나갑니다(끝점에 움직이는 점 표시).
 - 세로축이 t인 시공간 히트맵: 시간선이 아래에서 위로 움직입니다.
 - 점선·파선은 기준선이므로 그대로 두고, x–y 평면의 색 지도·등고선은 정지 그래프입니다.
@@ -11,6 +13,7 @@
 같은 재생 막대로 움직입니다.
 """
 import math
+import re
 import numpy as np
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QStyle
@@ -48,16 +51,21 @@ def _data_axes(figure):
     return [axes for axes in figure.axes if axes.get_label() != '<colorbar>']
 
 
+TIME_LABEL = re.compile(r'^\s*t\s*=')
+
+
 class _Sequence:
-    """선을 그린 순서대로 하나씩 보입니다."""
+    """선을 그린 순서대로 보입니다. 시각별 곡선(t=…)은 잔상 없이 현재 곡선만 보입니다."""
 
     def __init__(self, lines):
         self.lines = lines
+        self.exclusive = all(TIME_LABEL.match(line.get_label()) for line in lines)
 
     def show(self, progress):
         k = int(round(progress*(len(self.lines)-1)))
+        last = progress >= 1
         for i, line in enumerate(self.lines):
-            line.set_visible(i <= k)
+            line.set_visible(i <= k if last or not self.exclusive else i == k)
         return self.lines[k].get_label()
 
     @property
@@ -103,6 +111,36 @@ class _Sweep:
         if self.reference is not None and len(self.reference) and not done:
             return f'x = {self.reference[max(1, math.ceil(progress*len(self.reference)))-1]:.4g}까지'
         return None
+
+
+class _LiveCurve:
+    """시간별 함수 그래프에서 스냅숏 곡선을 숨기고 전체 시간 데이터의 곡선 하나를 움직입니다."""
+
+    def __init__(self, axes, series):
+        self.snapshots = [line for line in axes.lines if _solid(line)]
+        self.frames_data = np.asarray(series['frames'])
+        self.labels = series['labels']
+        self.line, = axes.plot(series['x'], self.frames_data[0], color='black', linewidth=2.2, zorder=6)
+        self.line.set_label('_재생 점')
+        self.line.set_visible(False)
+        # 진동하는 해가 스냅숏 범위를 넘어도 잘리지 않도록 세로 범위를 넓힙니다.
+        low, high = axes.get_ylim()
+        data_low, data_high = float(self.frames_data.min()), float(self.frames_data.max())
+        margin = .05*max(data_high-data_low, 1e-12)
+        axes.set_ylim(min(low, data_low-margin), max(high, data_high+margin))
+
+    @property
+    def frames(self):
+        return len(self.frames_data)
+
+    def show(self, progress):
+        index = int(round(progress*(self.frames-1)))
+        playing = progress < 1
+        for line in self.snapshots:
+            line.set_visible(not playing)
+        self.line.set_ydata(self.frames_data[index])
+        self.line.set_visible(playing)
+        return self.labels[index]
 
 
 class _TimeLine:
@@ -158,7 +196,8 @@ def _field_times(axes):
 class FigureAnimator:
     """그래프 하나의 프레임을 계산합니다. frames가 1이면 정지 그래프입니다."""
 
-    def __init__(self, figure, custom=None):
+    def __init__(self, figure, custom=None, series=None):
+        """series는 주제 animation()의 1차원 데이터로, 시간별 함수 그래프를 실제 시간에 따라 움직입니다."""
         self.figure = figure
         self.custom = custom
         self.parts = []
@@ -166,6 +205,10 @@ class FigureAnimator:
             self.frames = custom['frames']
             return
         for axes in _data_axes(figure):
+            if series is not None and series.get('kind') != 'field' and any(_solid(line) for line in axes.lines):
+                self.parts.append(_LiveCurve(axes, series))
+                series = None
+                continue
             solid = [line for line in axes.lines if _solid(line)]
             markers = [line for line in axes.lines if _markers(line)]
             stems = [c for c in axes.collections if isinstance(c, LineCollection) and len(c.get_segments()) > 2]

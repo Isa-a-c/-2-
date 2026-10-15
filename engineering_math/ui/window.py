@@ -456,7 +456,14 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(QLabel(HINT))
         layout.addWidget(toolbar)
         layout.addWidget(canvas, 1)
-        player = PlayerBar(FigureAnimator(figure, custom), canvas, page)
+        series = None
+        if custom is None and self.result is not None and self.tabs.tabText(index).startswith('시간별')                 and getattr(self.topic, 'supports_animation', True):
+            # 시간별 그래프는 몇 개의 스냅숏 대신 전체 시간 데이터로 곡선을 움직입니다.
+            try:
+                series = self.topic.animation(self.result)
+            except Exception:
+                series = None
+        player = PlayerBar(FigureAnimator(figure, custom, series), canvas, page)
         layout.addWidget(player)
         page.player = player
         canvas.draw()

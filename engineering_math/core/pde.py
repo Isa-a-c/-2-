@@ -11,12 +11,12 @@ def evolution_animation(x, time, initial, frames, ylabel='u'):
 
 
 def sine_coefficients(x, values, length, count):
-    """[0, ell] 함수의 사인 계수 (2/ell)∫f sin(nπx/ell)dx (기확장의 Fourier 계수와 같음)."""
+    """[0, l] 함수의 사인 계수 (2/l)∫f sin(nπx/l)dx (기확장의 Fourier 계수와 같음)."""
     return half_range_coefficients(x, values, length, count, False)[1]
 
 
 def cosine_coefficients(x, values, length, count):
-    """[0, ell] 함수를 우확장한 A₀=(1/ell)∫f, Aₙ=(2/ell)∫f cos(nπx/ell)입니다."""
+    """[0, l] 함수를 우확장한 A₀=(1/l)∫f, Aₙ=(2/l)∫f cos(nπx/l)입니다."""
     return half_range_coefficients(x, values, length, count, True)
 
 
@@ -41,17 +41,17 @@ def heat_accuracy(expression, params, coefficients):
 
     def integrate(sample_count, order):
         grid = np.linspace(0, length, sample_count)
-        values = evaluate(expression, (grid, length), ('x', 'ell'))
+        values = evaluate(expression, (grid, length), ('x', 'l'))
         if insulated:
             return np.r_[cosine_coefficients(grid, values, length, order)]
         return sine_coefficients(grid, values-steady(grid), length, order)
 
     refined = integrate(2*points-1, count)
     higher = integrate(points, higher_count)
-    initial = evaluate(expression, (evaluation_x, length), ('x', 'ell'))
+    initial = evaluate(expression, (evaluation_x, length), ('x', 'l'))
     if insulated:
         grid = np.linspace(0, length, points)
-        coefficients = np.r_[cosine_coefficients(grid, evaluate(expression, (grid, length), ('x', 'ell')), length, count)]
+        coefficients = np.r_[cosine_coefficients(grid, evaluate(expression, (grid, length), ('x', 'l')), length, count)]
 
     def snapshots(values):
         times = np.array([0., params['end_time']])[:, None]

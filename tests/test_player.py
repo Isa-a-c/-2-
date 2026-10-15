@@ -261,3 +261,42 @@ def test_play_pause_stop_buttons_and_seek(app):
     buttons['stop'].click()
     assert not player.playing and player.slider.value() == player.slider.maximum()
     assert not buttons['stop'].isEnabled() and buttons['play'].isEnabled()
+
+
+def test_time_graph_moves_single_curve_without_trails():
+    import matplotlib.pyplot as plt
+    wave = get_topic('wave')
+    result = wave.compute({})
+    figure = wave.figures(result)['시간별 변위']
+    series = wave.animation(result)
+    animator = FigureAnimator(figure, series=series)
+    assert animator.frames == len(result.data['time'])
+    live = animator.parts[0].line
+    snapshots = animator.parts[0].snapshots
+    assert animator.show(10).endswith(series['labels'][10])
+    assert live.get_visible() and not any(line.get_visible() for line in snapshots)
+    np.testing.assert_array_equal(live.get_ydata(), series['frames'][10])
+    low, high = figure.axes[0].get_ylim()
+    assert low <= series['frames'].min() and high >= series['frames'].max()
+    animator.show(animator.frames-1)
+    assert not live.get_visible() and all(line.get_visible() for line in snapshots)
+    plt.close('all')
+
+
+def test_time_snapshots_without_series_show_only_current():
+    import matplotlib.pyplot as plt
+    heat = get_topic('heat')
+    figure = heat.figures(heat.compute({}))['시간별 온도']
+    animator = FigureAnimator(figure)
+    animator.show(2)
+    solid = [line for line in figure.axes[0].lines if line.get_linestyle() == '-']
+    assert [line.get_visible() for line in solid] == [False, False, True, False, False]
+    animator.show(animator.frames-1)
+    assert all(line.get_visible() for line in solid)
+    # 차수별 곡선은 쌓아서 비교합니다.
+    fourier = get_topic('fourier')
+    orders = FigureAnimator(fourier.figures(fourier.compute({}))['여러 차수 비교'])
+    orders.show(2)
+    lines = orders.parts[0].lines
+    assert [line.get_visible() for line in lines] == [True, True, True, False, False]
+    plt.close('all')

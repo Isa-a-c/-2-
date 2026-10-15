@@ -94,16 +94,16 @@ def test_heat_single_mode_exact_solution():
 
 
 def test_heat_nonunit_length():
-    result = HeatTopic().compute({'length': 3., 'alpha': .7, 'initial': '2*sin(2*pi*x/ell)'})
+    result = HeatTopic().compute({'length': 3., 'alpha': .7, 'initial': '2*sin(2*pi*x/l)'})
     data = result.data
     expected = 2*np.exp(-.7*(2*np.pi/3)**2*data['time'][:, None])*np.sin(2*np.pi*data['x']/3)
     np.testing.assert_allclose(data['temperature'], expected, atol=1e-13)
 
 
 def test_heat_steady_state_and_energy():
-    result = HeatTopic().compute({'initial': '20+60*x/ell', 'left': 20., 'right': 80.})
+    result = HeatTopic().compute({'initial': '20+60*x/l', 'left': 20., 'right': 80.})
     np.testing.assert_allclose(result.data['temperature'], np.broadcast_to(result.data['steady'], result.data['temperature'].shape), atol=1e-12)
-    result = HeatTopic().compute({'initial': '1-abs(2*x/ell-1)'})
+    result = HeatTopic().compute({'initial': '1-abs(2*x/l-1)'})
     energy = result.tables['잔차 에너지'][1][:, 1]
     assert np.all(np.diff(energy) <= 1e-14)
     assert np.all(result.data['temperature'][:, [0, -1]] == 0)

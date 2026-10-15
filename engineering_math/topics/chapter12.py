@@ -531,22 +531,22 @@ class MembraneTopic:
     id = 'rectangle_membrane'
     title = '12.8–12.9 · 직사각형 막과 이중 급수'
     description = '가장자리가 고정된 균질 막의 u_tt=c²(u_xx+u_yy)를 이중 사인 급수로 계산합니다.'
-    inputs = (InputSpec('initial', '초기 변위 f(x,y)', 'text', 'sin(pi*x/ell)*sin(pi*y/height)'),
+    inputs = (InputSpec('initial', '초기 변위 f(x,y)', 'text', 'sin(pi*x/l)*sin(pi*y/height)'),
               InputSpec('velocity', '초기 속도 g(x,y)', 'text', '0'), PARAMETERS,
-              InputSpec('length', '가로 길이 ℓ (수식: ell)', 'float', 1., .05, 20, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
-              InputSpec('height', '세로 길이 (수식: height)', 'float', 1., .05, 20, help='수식에 height라고 쓰면 이 값이 들어갑니다. 예: sin(pi*y/height)'),
+              InputSpec('length', '가로 길이 l', 'float', 1., .05, 20, help='수식에 l이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/l)'),
+              InputSpec('height', '세로 길이 height', 'float', 1., .05, 20, help='수식에 height라고 쓰면 이 값이 들어갑니다. 예: sin(pi*y/height)'),
               InputSpec('speed', '파동 속력 c', 'float', 1., .01, 20),
               InputSpec('N', '방향별 모드 수 N', 'int', 6, 1, 16),
               InputSpec('num_points', '방향별 공간 표본 수', 'int', 81, 41, 161)) + TIME_INPUTS
-    examples = {'기본 모드': {}, '두 모드': {'initial': 'sin(pi*x/ell)*sin(pi*y/height)+0.4*sin(2*pi*x/ell)*sin(3*pi*y/height)'},
-                '속도만 부여': {'initial': '0', 'velocity': 'sin(pi*x/ell)*sin(pi*y/height)'}}
+    examples = {'기본 모드': {}, '두 모드': {'initial': 'sin(pi*x/l)*sin(pi*y/height)+0.4*sin(2*pi*x/l)*sin(3*pi*y/height)'},
+                '속도만 부여': {'initial': '0', 'velocity': 'sin(pi*x/l)*sin(pi*y/height)'}}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
         x = np.linspace(0, p['length'], p['num_points'])
         y = np.linspace(0, p['height'], p['num_points'])
         xx, yy = np.meshgrid(x, y, indexing='ij')
-        variables = ('x', 'y', 'ell', 'height')
+        variables = ('x', 'y', 'l', 'height')
         initial = function(p['initial'], p['parameters'], variables)(xx, yy, p['length'], p['height'])
         velocity = function(p['velocity'], p['parameters'], variables)(xx, yy, p['length'], p['height'])
         time = np.linspace(0, p['end_time'], p['time_points'])
@@ -564,7 +564,7 @@ class MembraneTopic:
         result.data['modeling'] = {key: model[key] for key in ('x0', 'y0', 'moment')}
         result.data['modal'] = (a, v)
         groups = degenerate_groups(omega)
-        result.tables['중복 고유값'] = (['omega', 'c·π·√(m²/ell²+n²/height²)의 같은 값을 갖는 (m, n)'],
+        result.tables['중복 고유값'] = (['omega', 'c·π·√(m²/l²+n²/height²)의 같은 값을 갖는 (m, n)'],
                                        [[value, ', '.join(f'({m},{n})' for m, n in pairs)] for value, pairs in groups])
         if groups:
             result.notices.append(f'같은 진동수를 갖는 서로 다른 모드 조합이 {len(groups)}개 있습니다(교재 12.9 예제 1). '
@@ -678,24 +678,24 @@ class MembraneTopic:
 class DiskMembraneTopic(MembraneTopic):
     id = 'disk_membrane'
     title = '12.10 · 원형 막과 Fourier–Bessel 급수'
-    description = '고정 원주를 갖는 원형 막입니다. r·theta·ell을 입력에 사용하며 ell은 반지름입니다.'
-    inputs = (InputSpec('initial', '초기 변위 f(r,theta)', 'text', '1-(r/ell)^2'),
+    description = '고정 원주를 갖는 원형 막입니다. r·theta·l을 입력에 사용하며 l은 반지름입니다.'
+    inputs = (InputSpec('initial', '초기 변위 f(r,theta)', 'text', '1-(r/l)^2'),
               InputSpec('velocity', '초기 속도 g(r,theta)', 'text', '0'), PARAMETERS,
-              InputSpec('radius', '반지름 ℓ (수식: ell)', 'float', 1., .05, 20, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*r/ell)'),
+              InputSpec('radius', '반지름 l', 'float', 1., .05, 20, help='수식에 l이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*r/l)'),
               InputSpec('speed', '파동 속력 c', 'float', 1., .01, 20),
               InputSpec('radial_count', '방사 모드 수', 'int', 6, 1, 16),
               InputSpec('angular_count', '최대 각도 차수 m', 'int', 2, 0, 6),
               InputSpec('num_points', '방사 표본 수', 'int', 101, 41, 201),
               InputSpec('angular_points', '각도 표본 수', 'int', 81, 33, 161)) + TIME_INPUTS
-    examples = {'비축대칭 막': {'initial': '(r/ell)*(1-r/ell)*cos(theta)'},
-                '기본 Bessel 모드': {'initial': 'besselj(0,2.404825557695773*r/ell)', 'radial_count': 1, 'angular_count': 0}}
+    examples = {'비축대칭 막': {'initial': '(r/l)*(1-r/l)*cos(theta)'},
+                '기본 Bessel 모드': {'initial': 'besselj(0,2.404825557695773*r/l)', 'radial_count': 1, 'angular_count': 0}}
 
     def compute(self, params):
         p = validate_params(self.inputs, params)
         r = np.linspace(0, p['radius'], p['num_points'])
         theta = np.linspace(0, 2*np.pi, p['angular_points'], endpoint=False)
         rr, tt = np.meshgrid(r, theta, indexing='ij')
-        variables = ('r', 'theta', 'ell')
+        variables = ('r', 'theta', 'l')
         f = function(p['initial'], p['parameters'], variables)
         g = function(p['velocity'], p['parameters'], variables)
         initial, velocity = f(rr, tt, p['radius']), g(rr, tt, p['radius'])
@@ -739,16 +739,16 @@ class DiskMembraneTopic(MembraneTopic):
 class RectangleLaplaceTopic:
     id = 'rectangle_laplace'
     title = '12.6 · 직사각형 정상 상태와 Laplace 방정식'
-    description = '직사각형 [0,ell]×[0,height]에서 u_xx+u_yy=0의 네 변 Dirichlet 문제를 sinh 급수의 중첩으로 계산합니다.'
+    description = '직사각형 [0,l]×[0,height]에서 u_xx+u_yy=0의 네 변 Dirichlet 문제를 sinh 급수의 중첩으로 계산합니다.'
     supports_animation = False
-    SIDE_VARIABLES = {'top': ('x', 'ell', 'height'), 'bottom': ('x', 'ell', 'height'),
-                      'left': ('y', 'ell', 'height'), 'right': ('y', 'ell', 'height')}
-    inputs = (InputSpec('top', '윗변 u(x, height)', 'text', 'sin(pi*x/ell)'),
+    SIDE_VARIABLES = {'top': ('x', 'l', 'height'), 'bottom': ('x', 'l', 'height'),
+                      'left': ('y', 'l', 'height'), 'right': ('y', 'l', 'height')}
+    inputs = (InputSpec('top', '윗변 u(x, height)', 'text', 'sin(pi*x/l)'),
               InputSpec('bottom', '아랫변 u(x, 0)', 'text', '0'),
               InputSpec('left', '왼쪽 변 u(0, y)', 'text', '0'),
-              InputSpec('right', '오른쪽 변 u(ell, y)', 'text', '0'), PARAMETERS,
-              InputSpec('length', '가로 길이 ℓ (수식: ell)', 'float', 1., .01, 1000, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
-              InputSpec('height', '세로 길이 (수식: height)', 'float', 1., .01, 1000, help='수식에 height라고 쓰면 이 값이 들어갑니다. 예: sin(pi*y/height)'),
+              InputSpec('right', '오른쪽 변 u(l, y)', 'text', '0'), PARAMETERS,
+              InputSpec('length', '가로 길이 l', 'float', 1., .01, 1000, help='수식에 l이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/l)'),
+              InputSpec('height', '세로 길이 height', 'float', 1., .01, 1000, help='수식에 height라고 쓰면 이 값이 들어갑니다. 예: sin(pi*y/height)'),
               InputSpec('N', '변마다 급수 차수 N', 'int', 30, 1, 200),
               InputSpec('num_points', '방향별 표시 표본 수', 'int', 101, 41, 301),
               InputSpec('quadrature_points', '경계 구적 노드 수', 'int', 1024, 128, 8192))

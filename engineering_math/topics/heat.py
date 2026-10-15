@@ -50,9 +50,9 @@ class HeatTopic:
     description = 'u_t = α u_xx를 급수로 계산합니다. 양 끝 온도 고정 또는 양 끝 단열(u_x=0)을 선택하십시오.'
     inputs = (
         InputSpec('mode', '경계조건', 'choice', FIXED, choices=(FIXED, INSULATED)),
-        InputSpec('initial', '초기 온도 u(x,0)', 'text', 'sin(pi*x/ell)', help='x와 막대 길이 ell을 사용하십시오.'),
+        InputSpec('initial', '초기 온도 u(x,0)', 'text', 'sin(pi*x/l)', help='x와 막대 길이 l을 사용하십시오.'),
         InputSpec('parameters', '매개변수 (A=2; w=3)', 'text', ''),
-        InputSpec('length', '막대 길이 ℓ (수식: ell)', 'float', 1., .001, 1000, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
+        InputSpec('length', '막대 길이 l', 'float', 1., .001, 1000, help='수식에 l이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/l)'),
         InputSpec('alpha', '열확산계수 α', 'float', .1, .000001, 1000),
         InputSpec('left', '왼쪽 경계 온도', 'float', 0., -100000, 100000, visible_in=(FIXED,)),
         InputSpec('right', '오른쪽 경계 온도', 'float', 0., -100000, 100000, visible_in=(FIXED,)),
@@ -61,10 +61,10 @@ class HeatTopic:
         InputSpec('time_points', '시간 표본 수', 'int', 101, 2, 501),
         InputSpec('end_time', '마지막 시간', 'float', 1., .000001, 10000),
     )
-    examples = {'기본 사인 모드': {}, '두 사인 모드': {'initial': 'sin(pi*x/ell)+0.5*sin(3*pi*x/ell)'},
-                '삼각형 초기 온도': {'initial': '1-abs(2*x/ell-1)'},
-                '정상 상태': {'initial': '20+60*x/ell', 'left': 20., 'right': 80.},
-                '단열 막대의 코사인 모드': {'mode': INSULATED, 'initial': '1+cos(pi*x/ell)'}}
+    examples = {'기본 사인 모드': {}, '두 사인 모드': {'initial': 'sin(pi*x/l)+0.5*sin(3*pi*x/l)'},
+                '삼각형 초기 온도': {'initial': '1-abs(2*x/l-1)'},
+                '정상 상태': {'initial': '20+60*x/l', 'left': 20., 'right': 80.},
+                '단열 막대의 코사인 모드': {'mode': INSULATED, 'initial': '1+cos(pi*x/l)'}}
 
     def compute(self, params):
         params = validate_params(self.inputs, params)
@@ -72,19 +72,19 @@ class HeatTopic:
         insulated = params['mode'] == INSULATED
         x = np.linspace(0, length, params['num_points'])
         time = np.linspace(0, params['end_time'], params['time_points'])
-        expression = parameter_expression(params['initial'], params['parameters'], variables=('x', 'ell'))
-        initial = evaluate(expression, (x, length), variables=('x', 'ell'))
+        expression = parameter_expression(params['initial'], params['parameters'], variables=('x', 'l'))
+        initial = evaluate(expression, (x, length), variables=('x', 'l'))
         wave_numbers = np.arange(1, count+1)*np.pi/length
         decay = np.exp(-params['alpha']*time[:, None]*wave_numbers**2)
         if insulated:
-            # 우확장의 코사인 계수: A₀=(1/ell)∫f, Aₙ=(2/ell)∫f cos(nπx/ell). A₀가 정상 상태입니다.
+            # 우확장의 코사인 계수: A₀=(1/l)∫f, Aₙ=(2/l)∫f cos(nπx/l). A₀가 정상 상태입니다.
             mean, coefficients = cosine_coefficients(x, initial, length, count)
             steady = np.full_like(x, mean)
             basis = np.cos(wave_numbers[:, None]*x)
             temperature = steady + decay @ (coefficients[:, None]*basis)
         else:
             steady = params['left'] + (params['right']-params['left'])*x/length
-            # 기확장의 사인 계수는 (2/ell) ∫[0,ell] residual*sin(nπx/ell) dx와 같습니다.
+            # 기확장의 사인 계수는 (2/l) ∫[0,l] residual*sin(nπx/l) dx와 같습니다.
             coefficients = sine_coefficients(x, initial-steady, length, count)
             basis = np.sin(wave_numbers[:, None]*x)
             temperature = steady + decay @ (coefficients[:, None]*basis)
@@ -97,7 +97,7 @@ class HeatTopic:
                    '유한 차수의 변수분리 해입니다. 공간 표본은 계수 적분과 시각화에 사용됩니다.',
                    '정확도 비교는 고정된 2049개 평가점에서 수행합니다. 격자·차수 간 차이는 참해에 대한 오차 상한이 아닙니다.']
         if insulated:
-            notices.insert(0, f'단열 경계 u_x(0,t)=u_x(ell,t)=0: 열이 빠져나가지 않으므로 온도는 초기 평균 {steady[0]:.6g}로 수렴합니다. 고유값 λ₀=0의 상수 모드가 정상 상태입니다.')
+            notices.insert(0, f'단열 경계 u_x(0,t)=u_x(l,t)=0: 열이 빠져나가지 않으므로 온도는 초기 평균 {steady[0]:.6g}로 수렴합니다. 고유값 λ₀=0의 상수 모드가 정상 상태입니다.')
         elif not np.allclose(initial[[0, -1]], [params['left'], params['right']]):
             notices.append('초기 함수의 끝점이 경계조건과 다릅니다. 급수 해의 끝점은 지정한 경계 온도로 고정됩니다.')
         metrics = {'초기 재구성 RMSE': float(np.sqrt(np.mean((temperature[0]-initial)**2))),

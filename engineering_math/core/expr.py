@@ -70,6 +70,9 @@ def _parse(text, variables, allow_complex):
         raise ValueError('지원하지 않는 문자가 있습니다.')
     local={name:item[0] for name,item in FUNCTIONS.items()}
     local.update(zip(variables,symbols_for(variables,allow_complex)))
+    if 'l' in variables and 'ell' not in variables:
+        # 길이 변수는 v1.9.2부터 l입니다. 예전 설정 파일의 ell도 같은 기호로 읽습니다.
+        local['ell'] = local['l']
     local.update(pi=sp.pi,E=sp.E)
     if allow_complex: local['I']=sp.I
     tree=ast.parse(text,mode='eval')
@@ -143,7 +146,7 @@ def parse_parameters(text):
     items = text.split(';')
     if len(items) > 16:
         raise ValueError('매개변수는 16개 이하로 입력하십시오.')
-    reserved = set(FUNCTIONS) | {'x', 't', 's', 'ell', 'pi', 'E', 'I', 'True', 'False'}
+    reserved = set(FUNCTIONS) | {'x', 't', 's', 'l', 'ell', 'pi', 'E', 'I', 'True', 'False'}
     parameters = {}
     for item in items:
         if item.count('=') != 1:

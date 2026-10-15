@@ -35,10 +35,10 @@ class WaveTopic:
     title = '12.2–12.3 · 현의 모델링과 변수분리'
     description = 'u_tt = c² u_xx의 고정단 현을 계산합니다. 초기 변위와 초기 속도를 각각 입력하십시오.'
     inputs = (
-        InputSpec('initial', '초기 변위 u(x,0)', 'text', 'sin(pi*x/ell)'),
+        InputSpec('initial', '초기 변위 u(x,0)', 'text', 'sin(pi*x/l)'),
         InputSpec('velocity', '초기 속도 u_t(x,0)', 'text', '0'),
         InputSpec('parameters', '매개변수 (A=2; w=3)', 'text', ''),
-        InputSpec('length', '현의 길이 ℓ (수식: ell)', 'float', 1., .001, 1000, help='수식에 ell이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/ell)'),
+        InputSpec('length', '현의 길이 l', 'float', 1., .001, 1000, help='수식에 l이라고 쓰면 이 값이 들어갑니다. 예: sin(pi*x/l)'),
         InputSpec('speed', '파동 속력 c', 'float', 1., .000001, 1000),
         InputSpec('N', '사인 급수 차수 N', 'int', 20, 1, 100),
         InputSpec('num_points', '공간 표본 수', 'int', 501, 201, 5001),
@@ -49,9 +49,9 @@ class WaveTopic:
     )
     examples = {
         '기본 사인 모드': {},
-        '두 사인 모드': {'initial': 'sin(pi*x/ell)+0.5*sin(3*pi*x/ell)'},
-        '삼각형 초기 변위': {'initial': '1-abs(2*x/ell-1)'},
-        '초기 속도만 부여': {'initial': '0', 'velocity': 'sin(pi*x/ell)'},
+        '두 사인 모드': {'initial': 'sin(pi*x/l)+0.5*sin(3*pi*x/l)'},
+        '삼각형 초기 변위': {'initial': '1-abs(2*x/l-1)'},
+        '초기 속도만 부여': {'initial': '0', 'velocity': 'sin(pi*x/l)'},
     }
 
     def compute(self, params):
@@ -59,10 +59,10 @@ class WaveTopic:
         length, count = params['length'], params['N']
         x = np.linspace(0, length, params['num_points'])
         time = np.linspace(0, params['end_time'], params['time_points'])
-        displacement_expr = parameter_expression(params['initial'], params['parameters'], ('x', 'ell'))
-        velocity_expr = parameter_expression(params['velocity'], params['parameters'], ('x', 'ell'))
-        initial = evaluate(displacement_expr, (x, length), ('x', 'ell'))
-        initial_velocity = evaluate(velocity_expr, (x, length), ('x', 'ell'))
+        displacement_expr = parameter_expression(params['initial'], params['parameters'], ('x', 'l'))
+        velocity_expr = parameter_expression(params['velocity'], params['parameters'], ('x', 'l'))
+        initial = evaluate(displacement_expr, (x, length), ('x', 'l'))
+        initial_velocity = evaluate(velocity_expr, (x, length), ('x', 'l'))
         displacement_coefficients = sine_coefficients(x, initial, length, count)
         velocity_coefficients = sine_coefficients(x, initial_velocity, length, count)
         wave_numbers = np.arange(1, count+1)*np.pi/length
@@ -85,7 +85,7 @@ class WaveTopic:
         if not all(np.all(np.isfinite(values)) for values in (displacement, energy, heat)):
             raise ValueError('유한하지 않은 결과가 발생했습니다. 입력 크기를 줄이십시오.')
         notices = [
-            '무감쇠·무외력·일정한 파동 속력과 고정단 u(0,t)=u(ell,t)=0을 가정합니다.',
+            '무감쇠·무외력·일정한 파동 속력과 고정단 u(0,t)=u(l,t)=0을 가정합니다.',
             '열 비교는 동일한 초기 모양과 0 경계조건을 사용합니다. 초기 속도는 파동에만 적용됩니다.',
             '시간 간격은 해의 적분 간격이 아니라 출력 간격입니다. 너무 크면 진동을 놓칠 수 있습니다.',
         ]
