@@ -1,10 +1,14 @@
 """주제 교체에 독립적인 공업수학 학습 화면입니다."""
+import math
+import time
+from html import escape
 from pathlib import Path
 import numpy as np
-from PySide6.QtCore import Qt, QAbstractTableModel, QSignalBlocker
+from PySide6.QtCore import Qt, QAbstractTableModel, QSignalBlocker, QSettings, QTimer
+from PySide6.QtGui import QKeySequence, QShortcut, QGuiApplication
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QComboBox, QLabel, QPushButton, QScrollArea, QTabWidget, QProgressBar, QMessageBox,
-    QFileDialog, QTableView, QTextBrowser)
+    QLabel, QPushButton, QScrollArea, QTabWidget, QProgressBar, QMessageBox, QCheckBox,
+    QFileDialog, QTableView, QTextBrowser, QApplication)
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from engineering_math import VERSION
 from engineering_math.topics import get_topic
@@ -16,9 +20,38 @@ from .jobs import CalculationJob
 from .animation import AnimationDialog
 from .experiments import ExperimentSelector
 
+# 마지막 계산이 이 시간(초) 안에 끝난 구성만 입력 변경 시 자동으로 다시 계산합니다.
+AUTO_LIMIT = 1.0
+AUTO_DELAY_MS = 450
+ZOOM_STEPS = (.85, 1., 1.15, 1.3, 1.5, 1.75, 2.)
+SUPERSCRIPT = str.maketrans('-0123456789', '⁻⁰¹²³⁴⁵⁶⁷⁸⁹')
+
+
+def format_number(value, digits=6):
+    """표·지표용 짧은 숫자 표기입니다. 정수는 소수점 없이, 아주 크거나 작은 값은 e 표기입니다."""
+    if isinstance(value, (bool, np.bool_)):
+        return str(bool(value))
+    if isinstance(value, (int, np.integer)):
+        return str(int(value))
+    if isinstance(value, (float, np.floating)):
+        return f'{float(value):.{digits}g}'
+    return str(value)
+
+
+def pretty_number(value):
+    """지표 줄에서 1.2e-05를 1.2×10⁻⁵처럼 보여 줍니다."""
+    text = format_number(value)
+    if 'e' in text and isinstance(value, (float, np.floating)) and math.isfinite(value):
+        mantissa, exponent = text.split('e')
+        return f'{mantissa}×10{str(int(exponent)).translate(SUPERSCRIPT)}'
+    return text
+
 
 class ResultTable(QAbstractTableModel):
-    """표의 셀마다 위젯을 생성하지 않고 필요한 값만 표시합니다."""
+    """표의 셀마다 위젯을 생성하지 않고 필요한 값만 표시합니다.
+
+    화면에는 6자리로 줄여 보이고, 풍선 도움말과 복사(Ctrl+C)에는 전체 정밀도를 씁니다.
+    """
     def __init__(self, columns, rows, parent=None):
         super().__init__(parent)
         self.columns, self.rows = columns, rows
@@ -29,18 +62,51 @@ class ResultTable(QAbstractTableModel):
     def columnCount(self, parent=None):
         return len(self.columns)
 
+    def raw(self, row, column):
+        value = self.rows[row][column]
+        return repr(float(value)) if isinstance(value, (float, np.floating)) else format_number(value)
+
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if role == Qt.ItemDataRole.DisplayRole and index.isValid():
-            value = self.rows[index.row()][index.column()]
-            return f'{value:.8g}' if isinstance(value, (float, np.floating)) else str(value)
+        if not index.isValid():
+            return None
+        value = self.rows[index.row()][index.column()]
+        if role == Qt.ItemDataRole.DisplayRole:
+            return format_number(value)
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return self.raw(index.row(), index.column())
+        if role == Qt.ItemDataRole.TextAlignmentRole and isinstance(value, (int, float, np.number)):
+            return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        return None
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             return self.columns[section] if orientation == Qt.Orientation.Horizontal else str(section+1)
 
 
+class ResultView(QTableView):
+    """선택한 셀을 탭으로 구분한 전체 정밀도 텍스트로 복사합니다(엑셀에 붙여넣기 가능)."""
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self.copy_selection()
+        else:
+            super().keyPressEvent(event)
+
+    def copy_selection(self):
+        indexes = self.selectedIndexes()
+        if not indexes:
+            return
+        model = self.model()
+        rows = sorted({index.row() for index in indexes})
+        columns = sorted({index.column() for index in indexes})
+        chosen = {(index.row(), index.column()) for index in indexes}
+        lines = ['\t'.join(model.columns[c] for c in columns)] if len(rows) > 1 else []
+        lines += ['\t'.join(model.raw(r, c) if (r, c) in chosen else '' for c in columns) for r in rows]
+        QGuiApplication.clipboard().setText('\n'.join(lines))
+
+
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, settings=None):
         super().__init__()
         self.setWindowTitle(f'공업수학 학습 스튜디오 {VERSION}')
         self.resize(1400, 900)
@@ -53,29 +119,54 @@ class MainWindow(QMainWindow):
         self.job = CalculationJob(self)
         self.job.completed.connect(self.present)
         self.job.failed.connect(self.show_error)
+        # 글자 배율과 자동 계산 선택을 기억합니다. 테스트는 임시 파일을 넘깁니다.
+        self.settings = settings if settings is not None else QSettings('EngineeringMathStudio', 'studio')
+        self.durations = {}
+        self.started = None
+        self.auto_job = False
+        self.auto_waiting = False
+        self.auto_timer = QTimer(self)
+        self.auto_timer.setSingleShot(True)
+        self.auto_timer.setInterval(AUTO_DELAY_MS)
+        self.auto_timer.timeout.connect(self.auto_calculate)
+        # 확대 배율을 곱하기 전의 기본 글자 크기를 한 번만 기록합니다(창을 다시 만들어도 누적되지 않음).
+        app = QApplication.instance()
+        if app.property('base_point_size') is None:
+            app.setProperty('base_point_size', QApplication.font().pointSizeF())
+        self.base_point_size = float(app.property('base_point_size'))
+        self.zoom = float(self.settings.value('zoom', 1.))
 
-        # 공통 입력 패널: 새 주제는 명세만 제공하면 기본 폼을 사용할 수 있습니다.
+        # 왼쪽 위는 교재 목차 트리, 아래는 입력 폼입니다. 경계는 끌어서 조절합니다.
         splitter = QSplitter()
         self.setCentralWidget(splitter)
-        left = QWidget()
-        layout = QVBoxLayout(left)
+        left = QSplitter(Qt.Orientation.Vertical)
         self.selector = ExperimentSelector()
-        layout.addWidget(self.selector)
+        left.addWidget(self.selector)
+        inputs = QWidget()
+        layout = QVBoxLayout(inputs)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.description = QLabel()
         self.description.setWordWrap(True)
         layout.addWidget(self.description)
-        self.examples = QComboBox()
-        layout.addWidget(self.examples)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         layout.addWidget(self.scroll)
         controls = QHBoxLayout()
         calculate = QPushButton('계산하기')
+        calculate.setToolTip('Ctrl+Enter')
+        calculate.setDefault(True)
         cancel = QPushButton('계산 취소')
+        cancel.setToolTip('Esc')
         reset = QPushButton('초기화')
         for widget in (calculate, cancel, reset):
             controls.addWidget(widget)
         layout.addLayout(controls)
+        self.auto = QCheckBox('값을 바꾸면 자동으로 다시 계산')
+        self.auto.setToolTip(f'입력을 바꾸고 잠시 멈추면 다시 계산합니다. 마지막 계산이 {AUTO_LIMIT:g}초보다 '
+                             '오래 걸린 구성은 계산하기를 직접 누르십시오.')
+        self.auto.setChecked(self.settings.value('auto', 'true') in (True, 'true'))
+        self.auto.toggled.connect(lambda checked: self.settings.setValue('auto', checked))
+        layout.addWidget(self.auto)
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.hide()
@@ -87,12 +178,16 @@ class MainWindow(QMainWindow):
         self.laplace_link.setEnabled(False)
         self.laplace_link.clicked.connect(self.open_laplace)
         layout.addWidget(self.laplace_link)
+        left.addWidget(inputs)
+        left.setStretchFactor(0, 2)
+        left.setStretchFactor(1, 3)
         splitter.addWidget(left)
 
         right = QWidget()
         output = QVBoxLayout(right)
         self.metrics = QLabel('입력값을 확인한 후 계산하기를 누르십시오.')
         self.metrics.setWordWrap(True)
+        self.metrics.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         output.addWidget(self.metrics)
         self.input_state = QLabel()
         self.input_state.setWordWrap(True)
@@ -107,11 +202,14 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right)
         splitter.setSizes([430, 970])
         self.selector.currentIndexChanged.connect(self.change_topic)
-        self.examples.activated.connect(self.apply_example)
+        self.selector.exampleChosen.connect(self.apply_example)
         calculate.clicked.connect(self.calculate)
         cancel.clicked.connect(self.cancel)
         reset.clicked.connect(lambda: self.form.set_values({}))
         self.animate.clicked.connect(self.show_animation)
+        for keys in ('Ctrl+Return', 'Ctrl+Enter'):
+            QShortcut(QKeySequence(keys), self, self.calculate)
+        QShortcut(QKeySequence('Esc'), self, self.cancel)
 
         menu = self.menuBar().addMenu('파일')
         menu.addAction('설정 저장…', self.save)
@@ -119,7 +217,14 @@ class MainWindow(QMainWindow):
         menu.addAction('결과 CSV 묶음 저장…', self.export)
         menu.addSeparator()
         menu.addAction('종료', self.close)
+        view = self.menuBar().addMenu('보기')
+        for text, keys, slot in [('글자 크게', ('Ctrl++', 'Ctrl+='), lambda: self.step_zoom(1)),
+                                 ('글자 작게', ('Ctrl+-',), lambda: self.step_zoom(-1)),
+                                 ('글자 기본 크기', ('Ctrl+0',), lambda: self.set_zoom(1.))]:
+            action = view.addAction(text, slot)
+            action.setShortcuts([QKeySequence(key) for key in keys])
         self.menuBar().addAction('학습 안내', self.help)
+        self.set_zoom(self.zoom, redraw=False)
         self.change_topic()
 
     def clear_output(self):
@@ -145,28 +250,52 @@ class MainWindow(QMainWindow):
         self.topic = get_topic(entry.topic)
         self.laplace_link.setVisible(self.topic.id == 'ode')
         self.description.setText(self.topic.description)
-        old = self.scroll.takeWidget()
-        if old is not None:
-            old.deleteLater()
-        self.form = InputForm(self.topic.inputs, entry.defaults)
-        self.form.set_values(self.states.get(self.state_key, {}))
-        self.form.changed.connect(self.update_input_state)
-        self.scroll.setWidget(self.form)
-        self.examples.clear()
-        self.examples.addItem('예제를 선택하십시오')
-        for name, params in self.topic.examples.items():
-            if all(params.get(key, next(s.default for s in self.topic.inputs if s.key == key)) == value
-                   for key, value in entry.defaults.items()):
-                self.examples.addItem(name)
+        self.build_form(self.states.get(self.state_key, {}))
+        self.selector.ensure_examples(self.state_key)
         self.clear_output()
         self.add_lesson()
         self.update_input_state()
-        self.metrics.setText('입력값을 확인한 후 계산하기를 누르십시오.')
+        self.auto_timer.stop()
+        self.auto_waiting = False
+        self.metrics.setText('왼쪽 목록에서 예제를 고르거나 입력값을 확인한 후 계산하기를 누르십시오.')
         self.notices.clear()
 
-    def apply_example(self, index):
-        if index > 0:
-            self.form.set_values(self.topic.examples[self.examples.itemText(index)])
+    def build_form(self, values):
+        old = self.scroll.takeWidget()
+        if old is not None:
+            old.deleteLater()
+        self.form = InputForm(self.topic.inputs, self.selector.experiment.defaults)
+        self.form.set_values(values)
+        self.form.changed.connect(self.update_input_state)
+        self.form.changed.connect(self.schedule_auto)
+        self.scroll.setWidget(self.form)
+
+    def apply_example(self, name):
+        """예제를 입력에 채우고 바로 계산합니다."""
+        self.form.set_values(self.topic.examples[name])
+        self.calculate()
+
+    def schedule_auto(self):
+        if self.auto.isChecked() and self.durations.get(self.state_key, 0.) <= AUTO_LIMIT:
+            self.auto_timer.start()
+
+    def auto_calculate(self):
+        if self.job.busy:
+            # 진행 중인 계산을 끊으면 작업 프로세스를 다시 띄워야 하므로 끝난 뒤에 계산합니다.
+            self.auto_waiting = True
+            return
+        try:
+            params = validate_params(self.topic.inputs, self.form.values())
+        except ValueError as exc:
+            self.statusBar().showMessage(f'자동 계산 보류: {exc}')
+            return
+        if self.result is None or self.result.params != params:
+            self.calculate(auto=True)
+
+    def resume_auto(self):
+        if self.auto_waiting:
+            self.auto_waiting = False
+            self.schedule_auto()
 
     def add_lesson(self):
         browser = QTextBrowser()
@@ -188,7 +317,10 @@ class MainWindow(QMainWindow):
             self.input_state.setText('현재 입력값과 계산 결과가 일치합니다.')
             self.input_state.setStyleSheet('')
 
-    def calculate(self):
+    def calculate(self, auto=False):
+        self.auto_timer.stop()
+        self.auto_waiting = False
+        self.auto_job = auto
         try:
             params = validate_params(self.topic.inputs, self.form.values())
         except ValueError as exc:
@@ -200,12 +332,15 @@ class MainWindow(QMainWindow):
             return
         self.progress.show()
         self.statusBar().showMessage('계산 중입니다. 취소하거나 다른 주제로 이동할 수 있습니다.')
+        self.started = time.monotonic()
         try:
             self.job.start(self.topic.id, params)
         except Exception as exc:
             self.show_error(str(exc))
 
     def cancel(self):
+        self.auto_timer.stop()
+        self.auto_waiting = False
         self.job.cancel()
         self.progress.hide()
         self.statusBar().showMessage('계산이 중지되었습니다.')
@@ -214,8 +349,14 @@ class MainWindow(QMainWindow):
         self.progress.hide()
         if result.topic != self.topic.id:
             return
+        auto, self.auto_job = self.auto_job, False
+        # 같은 구성을 다시 계산하면 보던 탭(그래프·표)에 그대로 머뭅니다.
+        previous = self.result is not None and self.result.topic == result.topic
+        current_tab = self.tabs.tabText(self.tabs.currentIndex()) if previous else None
+        current_table = self.table_tab_name() if previous else None
         try:
             self.clear_output()
+            blocker = QSignalBlocker(self.tabs)
             figures = self.topic.figures(result)
             for name, figure in figures.items():
                 page = QWidget()
@@ -223,11 +364,17 @@ class MainWindow(QMainWindow):
                 self.tabs.addTab(page, name)
                 self.figures.append(figure)
             table_tabs = QTabWidget()
+            table_tabs.setObjectName('tables')
             for name, (columns, rows) in result.tables.items():
-                table = QTableView()
+                table = ResultView()
                 table.setModel(ResultTable(columns, rows, table))
                 table.setAlternatingRowColors(True)
+                table.setSelectionMode(QTableView.SelectionMode.ExtendedSelection)
+                table.setToolTip('셀을 선택하고 Ctrl+C를 누르면 전체 자릿수로 복사됩니다.')
                 table_tabs.addTab(table, name)
+                if name == current_table:
+                    table_tabs.setCurrentIndex(table_tabs.count()-1)
+            table_tabs.currentChanged.connect(lambda i: self.fit_table(table_tabs.widget(i)))
             self.tabs.addTab(table_tabs, '수치 표')
             if 'symbolic' in result.data:
                 symbolic_view = QTextBrowser()
@@ -240,20 +387,55 @@ class MainWindow(QMainWindow):
             settings_view.setPlainText('\n'.join(lines))
             self.tabs.addTab(settings_view, '계산 설정')
             self.add_lesson()
-            self.metrics.setText('   |   '.join(f'{name}: {value:.6g}' for name, value in result.metrics.items()))
-            self.notices.setText('\n'.join(result.notices))
+            names = [self.tabs.tabText(i) for i in range(self.tabs.count())]
+            self.tabs.setCurrentIndex(names.index(current_tab) if current_tab in names else 0)
+            del blocker
+            self.show_metrics(result)
             self.result = result
             self.update_input_state()
             self.animate.setEnabled(getattr(self.topic, 'supports_animation', True))
             self.laplace_link.setEnabled(result.topic == 'ode' and bool(result.data.get('laplace_input')))
-            self.statusBar().showMessage('계산이 완료되었습니다. 결과는 계산 당시 입력값을 기준으로 합니다.')
             self.render_tab(self.tabs.currentIndex())
+            elapsed = None
+            if self.started is not None:
+                # 그래프를 그리는 시간까지 포함해야 자동 계산이 화면을 막는지 판단할 수 있습니다.
+                # 작업 프로세스를 처음 띄운 계산은 가져오기 시간이 섞이므로 기록하지 않습니다.
+                elapsed = time.monotonic() - self.started
+                if not self.job.cold:
+                    self.durations[self.state_key] = elapsed
+                self.started = None
+            message = '계산이 완료되었습니다.' if elapsed is None else f'계산이 완료되었습니다 ({elapsed:.2f}초).'
+            elapsed = self.durations.get(self.state_key, 0.)
+            if self.auto.isChecked() and elapsed > AUTO_LIMIT:
+                message += ' 계산이 오래 걸려 이 구성은 자동 계산을 쉽니다. 값을 바꾼 뒤 계산하기를 누르십시오.'
+            self.statusBar().showMessage(message)
+            self.resume_auto()
         except Exception as exc:
+            self.auto_job = auto
             self.show_error(str(exc))
+
+    def show_metrics(self, result):
+        """주요 지표를 굵은 이름과 값의 묶음으로 보여 주고, 안내는 글머리표로 나눕니다."""
+        cells = [f'<span style="white-space:nowrap"><b>{escape(name)}</b>&nbsp; {escape(pretty_number(value))}</span>'
+                 for name, value in result.metrics.items()]
+        self.metrics.setText('&nbsp;&nbsp;&nbsp;&nbsp; '.join(cells))
+        self.notices.setText('<br>'.join(f'• {escape(notice)}' for notice in result.notices))
+
+    def table_tab_name(self):
+        tables = self.tabs.findChild(QTabWidget, 'tables')
+        return tables.tabText(tables.currentIndex()) if tables is not None else None
+
+    @staticmethod
+    def fit_table(table):
+        if isinstance(table, QTableView) and not getattr(table, 'fitted', False):
+            table.fitted = True
+            table.resizeColumnsToContents()
 
     def render_tab(self, index):
         """선택한 탭에서만 Qt 캔버스를 만들고 처음 한 번 그립니다."""
         page = self.tabs.widget(index)
+        if isinstance(page, QTabWidget):
+            self.fit_table(page.currentWidget())
         if page is None or not hasattr(page, 'pending_figure'):
             return
         figure = page.pending_figure
@@ -266,8 +448,41 @@ class MainWindow(QMainWindow):
 
     def show_error(self, message):
         self.progress.hide()
+        self.started = None
+        if self.auto_job:
+            # 입력하는 도중의 오류는 창을 띄우지 않고 상태 표시줄과 안내 줄에만 보여 줍니다.
+            self.auto_job = False
+            self.statusBar().showMessage(f'자동 계산 실패: {message}')
+            self.input_state.setText(f'자동 계산 실패: {message}')
+            self.input_state.setStyleSheet('color: #b00020; font-weight: bold;')
+            self.resume_auto()
+            return
         self.statusBar().showMessage('계산 또는 파일 작업에 실패했습니다.')
         QMessageBox.warning(self, '입력 및 계산 확인', message)
+        self.resume_auto()
+
+    def step_zoom(self, step):
+        nearest = min(range(len(ZOOM_STEPS)), key=lambda i: abs(ZOOM_STEPS[i]-self.zoom))
+        self.set_zoom(ZOOM_STEPS[max(0, min(len(ZOOM_STEPS)-1, nearest+step))])
+
+    def set_zoom(self, zoom, redraw=True):
+        """화면 글자와 그래프 글자 크기를 함께 바꾸고 다음 실행에도 기억합니다."""
+        import matplotlib
+        self.zoom = min(max(float(zoom), ZOOM_STEPS[0]), ZOOM_STEPS[-1])
+        self.settings.setValue('zoom', self.zoom)
+        font = QApplication.font()
+        font.setPointSizeF(self.base_point_size*self.zoom)
+        QApplication.setFont(font)
+        matplotlib.rcParams['font.size'] = 10*self.zoom
+        self.statusBar().showMessage(f'글자 크기 {self.zoom:.0%}')
+        if redraw and self.form is not None:
+            # 이미 만든 입력 칸은 이전 글자 크기의 폭을 유지하므로 같은 값으로 다시 만듭니다.
+            details = self.form.details.isChecked()
+            self.build_form(self.form.values())
+            self.form.details.setChecked(details)
+            self.auto_timer.stop()
+        if redraw and self.result is not None:
+            self.present(self.result)
 
     def show_animation(self):
         if self.result is not None:

@@ -1,6 +1,7 @@
 """주제의 입력 명세로 공통 폼을 생성합니다."""
 from PySide6.QtCore import Qt, Signal, QSignalBlocker
-from PySide6.QtWidgets import QWidget, QFormLayout, QHBoxLayout, QSlider, QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit, QPushButton
+from PySide6.QtWidgets import (QWidget, QFormLayout, QHBoxLayout, QSlider, QSpinBox, QDoubleSpinBox, QComboBox,
+    QLineEdit, QPushButton, QSizePolicy)
 from engineering_math.topics.catalog import NUMERICAL_KEYS
 
 
@@ -32,7 +33,11 @@ class InputForm(QWidget):
                 row = QWidget()
                 layout = QHBoxLayout(row)
                 layout.setContentsMargins(0, 0, 0, 0)
-                layout.addWidget(slider)
+                # 숫자 칸은 글자 크기에 맞춘 폭을 유지하고 슬라이더가 남는 폭을 씁니다.
+                widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+                metrics = widget.fontMetrics()
+                widget.setMinimumWidth(metrics.horizontalAdvance('8'*(len(str(int(spec.maximum)))+1)) + 4*metrics.height())
+                layout.addWidget(slider, 1)
                 layout.addWidget(widget)
             elif spec.kind == 'float':
                 widget = QDoubleSpinBox()

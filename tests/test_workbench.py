@@ -7,7 +7,7 @@ import sys
 import zipfile
 import numpy as np
 import pytest
-from engineering_math.topics.catalog import EXPERIMENTS, GROUPS, experiment_index
+from engineering_math.topics.catalog import EXPERIMENTS, experiment_index
 from engineering_math.topics import get_topic
 from engineering_math.core.models import validate_params
 from engineering_math.core.tables import GridRows
@@ -56,7 +56,8 @@ def test_common_ui_routes_settings_and_lazy_canvas(tmp_path):
     window = MainWindow()
     window.show()
     try:
-        assert window.selector.group.count() == len(GROUPS)
+        assert len(window.selector.entries) == len(EXPERIMENTS)
+        assert window.selector.tree.topLevelItemCount() == 3
         for index, entry in enumerate(EXPERIMENTS):
             window.selector.setCurrentIndex(index)
             assert window.topic.id == entry.topic
@@ -73,8 +74,8 @@ def test_common_ui_routes_settings_and_lazy_canvas(tmp_path):
         assert window.form.values()['num_points'] == 701
 
         # 사용자 선택 경로도 같은 명세로 연결됩니다.
-        window.selector.problem.setCurrentText('파동')
-        window.selector.configuration.setCurrentIndex(window.selector.configuration.findText('원형 막 · 원주 고정'))
+        disk = next(item for item in window.selector.entries if item.text(0) == '12.10 · 원형 막')
+        window.selector.on_clicked(disk)
         assert window.topic.id == 'disk_membrane'
         window.selector.select('heat')
         result = window.topic.compute(window.form.values())
@@ -95,7 +96,7 @@ def test_common_ui_routes_settings_and_lazy_canvas(tmp_path):
         save_settings(path, 'pde_laplace', {'mode': '반무한 열전도', 'amplitude': 3.})
         window.calculate = lambda: None
         window.load_path(path)
-        assert window.selector.problem.currentText() == '열전도'
+        assert window.selector.experiment.problem == '열전도'
         assert window.form.values()['mode'] == '반무한 열전도'
         assert window.form.values()['amplitude'] == 3.
         window.form.set_values({})

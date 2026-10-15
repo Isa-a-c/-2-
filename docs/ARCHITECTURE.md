@@ -35,6 +35,12 @@ AFTER: 실험군 → 문제 → 지원 구성으로 선택하고 교재 바로�
 - 테스트는 주제 목록의 위치가 아니라 교재 절 번호(`lesson`)로 주제를 고릅니다.
 
 
+## v1.8.0 화면 편의
+
+- `ui/experiments.py`의 `ExperimentSelector`는 콤보 상자 네 개 대신 장 → 절 → 예제 트리와 검색창입니다. 기존 API(`select`, `setCurrentIndex`, `findData`, `experiment`, `currentIndexChanged`)는 그대로이고, 예제를 누르면 `exampleChosen(name)`을 보냅니다. 예제 항목은 주제 모듈을 가져와야 하므로 절을 처음 펼치거나 선택할 때 채웁니다(시작 시간 유지).
+- `MainWindow`는 입력이 바뀌면 450 ms 뒤 자동 계산합니다. 같은 구성의 마지막 계산(그래프 포함)이 1초를 넘으면 쉬고, 작업 프로세스를 새로 띄운 첫 계산(`CalculationJob.cold`)은 가져오기 시간이 섞이므로 시간 기록에서 뺍니다. 계산 중에는 작업 프로세스를 끊지 않고 끝난 뒤에 이어서 계산합니다. 자동 계산의 오류는 대화상자 없이 안내 줄에 표시합니다.
+- 같은 구성을 다시 계산하면 보던 탭과 표 탭을 유지합니다. 표는 6자리로 보이고 풍선 도움말·Ctrl+C 복사는 전체 정밀도입니다. 글자 배율은 `QSettings`에 저장하며 Matplotlib `font.size`도 함께 바꿉니다. 테스트는 `MainWindow(settings)`에 임시 INI 파일을 넘겨 사용자 설정을 건드리지 않습니다.
+
 ## v1.7.1 변경
 
 - 사다리꼴 가중치 `trapezoid_weights`, 차수 블록 행렬 곱 `harmonic_projections`, 반구간 계수 `half_range_coefficients`를 `core/fourier.py` 한곳에 둡니다. `integrate_harmonics`(11.1 캐시), `core.chapter11.half_range`(11.2), `core.pde.sine_coefficients·cosine_coefficients`(12장)가 모두 이를 사용합니다. `core.chapter11.trapezoid_weights`는 같은 함수를 다시 내보냅니다.

@@ -64,6 +64,8 @@ class CalculationJob(QObject):
         self.results = None
         self.job_id = 0
         self.pending = None
+        # 작업 프로세스를 새로 띄운 뒤 첫 계산이면 True입니다(가져오기 시간이 포함됨).
+        self.cold = False
         # 마지막 성공 결과의 캐시만 보관합니다. 실패·취소는 캐시를 교체하지 않습니다.
         self.caches = {}
         self.timer = QTimer(self)
@@ -78,6 +80,7 @@ class CalculationJob(QObject):
         if self.process is not None and self.process.is_alive():
             return
         self.stop_worker()
+        self.cold = True
         context = mp.get_context('spawn')
         self.requests, self.results = context.Queue(), context.Queue()
         self.process = context.Process(target=worker_loop, args=(self.requests, self.results), daemon=True)
@@ -85,6 +88,7 @@ class CalculationJob(QObject):
 
     def start(self, topic_id, params):
         self.cancel()
+        self.cold = False
         self.ensure_worker()
         self.job_id += 1
         self.pending = (self.job_id, topic_id)
