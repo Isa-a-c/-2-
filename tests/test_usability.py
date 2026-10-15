@@ -139,3 +139,41 @@ def test_zoom_changes_fonts_and_is_remembered(window):
     assert float(window.settings.value('zoom')) == pytest.approx(1.15)
     window.set_zoom(1.)
     assert QApplication.font().pointSizeF() == pytest.approx(base)
+
+
+def test_custom_examples_are_grouped(window):
+    from engineering_math.ui.experiments import CUSTOM_GROUP, ROLE
+    selector = window.selector
+    for index, entry in enumerate(selector.entries):
+        selector.ensure_examples(index)
+        groups = [entry.child(i) for i in range(entry.childCount()) if entry.child(i).text(0) == CUSTOM_GROUP]
+        direct = [entry.child(i).text(0) for i in range(entry.childCount()) if entry.child(i).text(0) != CUSTOM_GROUP]
+        assert all(name.startswith('교재 ') for name in direct)
+        assert len(groups) <= 1
+        for group in groups:
+            names = [group.child(j).text(0) for j in range(group.childCount())]
+            assert names and not any(name.startswith('교재 ') for name in names)
+    # 사용자 지정 예시를 고르면 묶음이 펼쳐지고 바로 계산합니다.
+    selector.select('heat')
+    group = next(selector.entries[selector.currentIndex()].child(i) for i in range(selector.entries[selector.currentIndex()].childCount())
+                 if selector.entries[selector.currentIndex()].child(i).text(0) == CUSTOM_GROUP)
+    name = group.child(0).text(0)
+    selector.choose_example(name)
+    assert group.isExpanded() and selector.tree.currentItem().text(0) == name
+    wait(window)
+    assert window.result is not None
+    selector.search.setText(name)
+    assert not group.isHidden() and not group.child(0).isHidden()
+    selector.search.clear()
+
+
+def test_player_buttons_are_icon_only(app=None):
+    from PySide6.QtWidgets import QApplication
+    from matplotlib.figure import Figure
+    from engineering_math.ui.player import FigureAnimator, PlayerBar, ZoomCanvas
+    QApplication.instance() or QApplication([])
+    figure = Figure()
+    figure.add_subplot().plot([0, 1, 2], [0, 1, 0])
+    player = PlayerBar(FigureAnimator(figure), ZoomCanvas(figure))
+    assert all(button.text() == '' and not button.icon().isNull() and button.toolTip()
+               for button in player.buttons.values())

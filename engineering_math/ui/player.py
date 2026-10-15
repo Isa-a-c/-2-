@@ -346,9 +346,9 @@ class PlayerBar(QWidget):
         for key, icon, text, tip in [
                 ('first', QStyle.StandardPixmap.SP_MediaSkipBackward, '', '처음 (Home)'),
                 ('previous', QStyle.StandardPixmap.SP_MediaSeekBackward, '', f'뒤로 {self.seek}프레임 (전체의 약 10%). 한 프레임씩은 ← 키'),
-                ('play', QStyle.StandardPixmap.SP_MediaPlay, '재생', '재생 (Space로 재생·일시정지 전환)'),
-                ('pause', QStyle.StandardPixmap.SP_MediaPause, '일시정지', '지금 프레임에서 멈춤'),
-                ('stop', QStyle.StandardPixmap.SP_MediaStop, '정지', '멈추고 원래 그래프(마지막 프레임)로 돌아감'),
+                ('play', QStyle.StandardPixmap.SP_MediaPlay, '', '재생 (Space로 재생·일시정지 전환)'),
+                ('pause', QStyle.StandardPixmap.SP_MediaPause, '', '일시정지: 지금 프레임에서 멈춤'),
+                ('stop', QStyle.StandardPixmap.SP_MediaStop, '', '정지: 멈추고 원래 그래프(마지막 프레임)로 돌아감'),
                 ('next', QStyle.StandardPixmap.SP_MediaSeekForward, '', f'앞으로 {self.seek}프레임 (전체의 약 10%). 한 프레임씩은 → 키'),
                 ('last', QStyle.StandardPixmap.SP_MediaSkipForward, '', '끝 (End)')]:
             button = QPushButton(text)

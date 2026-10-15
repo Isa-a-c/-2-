@@ -11,6 +11,8 @@ from engineering_math.topics.textbook import EXAMPLES as TEXTBOOK
 
 CHAPTERS = (('11.', '11장 Fourier 해석'), ('12.', '12장 편미분방정식'))
 ROLE = Qt.ItemDataRole.UserRole
+TEXTBOOK_PREFIX = '교재 '
+CUSTOM_GROUP = '사용자 지정'
 
 
 def chapter_of(entry):
@@ -97,32 +99,57 @@ class ExperimentSelector(QWidget):
 
     # ── 예제 항목 ──────────────────────────────────────────────
     def ensure_examples(self, index):
+        """교재 예제는 절 바로 아래에, 그 밖의 예시는 '사용자 지정' 묶음 아래에 둡니다."""
         if index in self.loaded:
             return
         from engineering_math.topics import get_topic
         self.loaded.add(index)
         item = self.entries[index]
         item.takeChildren()
-        for name in entry_examples(EXPERIMENTS[index], get_topic(EXPERIMENTS[index].topic)):
-            child = QTreeWidgetItem(item, [name])
-            child.setData(0, ROLE, ('example', index, name))
-            child.setToolTip(0, name)
+        names = entry_examples(EXPERIMENTS[index], get_topic(EXPERIMENTS[index].topic))
+        custom = [name for name in names if not name.startswith(TEXTBOOK_PREFIX)]
+        for name in names:
+            if name not in custom:
+                self.add_example(item, index, name)
+        if custom:
+            group = QTreeWidgetItem(item, [CUSTOM_GROUP])
+            group.setData(0, ROLE, ('custom', index))
+            group.setToolTip(0, '교재 예제가 아닌 연습용 함수입니다.')
+            for name in custom:
+                self.add_example(group, index, name)
         if not item.childCount():
             item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicator)
 
-    def example_names(self, index):
+    @staticmethod
+    def add_example(parent, index, name):
+        child = QTreeWidgetItem(parent, [name])
+        child.setData(0, ROLE, ('example', index, name))
+        child.setToolTip(0, name)
+
+    def example_items(self, index):
+        """교재 예제와 사용자 지정 예시 항목을 화면 순서대로 돌려줍니다."""
         self.ensure_examples(index)
+        items = []
         item = self.entries[index]
-        return [item.child(i).text(0) for i in range(item.childCount())]
+        for i in range(item.childCount()):
+            child = item.child(i)
+            if child.data(0, ROLE)[0] == 'custom':
+                items.extend(child.child(j) for j in range(child.childCount()))
+            else:
+                items.append(child)
+        return items
+
+    def example_names(self, index):
+        return [child.text(0) for child in self.example_items(index)]
 
     def choose_example(self, name):
         """현재 구성의 예제 항목을 선택하고 exampleChosen을 보냅니다."""
-        item = self.entries[self._index]
-        self.ensure_examples(self._index)
-        for i in range(item.childCount()):
-            if item.child(i).text(0) == name:
+        for child in self.example_items(self._index):
+            if child.text(0) == name:
+                if child.parent() is not self.entries[self._index]:
+                    child.parent().setExpanded(True)
                 with QSignalBlocker(self.tree):
-                    self.tree.setCurrentItem(item.child(i))
+                    self.tree.setCurrentItem(child)
                 self.exampleChosen.emit(name)
                 return
         raise ValueError(f'이 구성에 없는 예제입니다: {name}')
@@ -137,7 +164,7 @@ class ExperimentSelector(QWidget):
         if not data:
             return
         self.setCurrentIndex(data[1])
-        if data[0] == 'entry':
+        if data[0] in ('entry', 'custom'):
             self.ensure_examples(data[1])
             item.setExpanded(True)
         else:
@@ -158,6 +185,17 @@ class ExperimentSelector(QWidget):
             matches = 0
             for i in range(item.childCount()):
                 child = item.child(i)
+                if child.data(0, ROLE) and child.data(0, ROLE)[0] == 'custom':
+                    inner = 0
+                    for j in range(child.childCount()):
+                        hit = own or text in child.child(j).text(0).lower()
+                        child.child(j).setHidden(not hit)
+                        inner += hit
+                    child.setHidden(not inner)
+                    if text and inner and not own:
+                        child.setExpanded(True)
+                    matches += inner
+                    continue
                 hit = own or text in child.text(0).lower()
                 child.setHidden(not hit)
                 matches += hit
